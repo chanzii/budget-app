@@ -380,13 +380,15 @@ export default function BudgetApp() {
                   margin={{ top: 10, right: 10, bottom: 10, left: 0 }}
                 >
                   <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis
-                    dataKey="name"
-                    interval={0}
-                    height={50}
-                    angle={0}
-                    tick={{ fontSize: 12 }}
-                  />
+                 <XAxis
+  dataKey="name"
+  interval={0}
+  height={100}
+  angle={-60}
+  textAnchor="end"
+  tickMargin={10}
+  tick={{ fontSize: 12 }}
+/>
                   <YAxis domain={[0, 100]} ticks={[0, 25, 50, 75, 100]} />
                   {/* 🔧 (수정) 미사용 파라미터 경고 제거 */}
                   <Tooltip
@@ -854,11 +856,14 @@ export default function BudgetApp() {
               >
                 <CartesianGrid strokeDasharray="3 3" />
                 <XAxis
-                  dataKey="name"
-                  interval={0}
-                  height={50}
-                  tick={{ fontSize: 12 }}
-                />
+  dataKey="name"
+  interval={0}
+  height={100}        // 회전 레이블 공간 확보
+  angle={-60}         // 세로에 가깝게 회전
+  textAnchor="end"    // 끝쪽 정렬로 겹침 방지
+  tickMargin={10}     // 축과 레이블 간격
+  tick={{ fontSize: 12 }}
+/>
                 <YAxis domain={[0, 100]} />
                 {/* 🔧 (수정) 미사용 파라미터 경고 제거 */}
                 <Tooltip
