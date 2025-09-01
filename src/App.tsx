@@ -628,131 +628,129 @@ export default function BudgetApp() {
 
         {/* === [모바일/데스크톱 반응형] 항목 목록 === */}
 <Section title="항목 목록">
-  {/* 데스크톱/태블릿: 기존 테이블 유지 (sm 이상에서만 표시) */}
-  <div className="hidden sm:block overflow-x-auto">
-    <table className="min-w-full text-sm">
+  {/* 휴대폰에선 컴팩트 폰트/패딩, 데스크톱은 기존 크기 유지 */}
+  <div className="overflow-x-auto sm:overflow-visible">
+    <table className="min-w-full text-xs sm:text-sm table-fixed">
+      {/* 열 너비: 모바일에선 항목명이 넓게(56%), 숫자칸은 고정 폭 */}
+      <colgroup>
+        <col className="w-[64px] sm:w-[80px]" />         {/* 상위 */}
+        <col className="w-[56%] sm:w-auto" />            {/* 항목명 (모바일에서 가장 넓게) */}
+        <col className="w-[92px] sm:w-[120px]" />        {/* 계획 */}
+        <col className="w-[104px] sm:w-[140px]" />       {/* 실제 */}
+        <col className="w-[92px] sm:w-[120px]" />        {/* 잔액 */}
+        <col className="w-[72px] sm:w-[100px]" />        {/* 관리 */}
+      </colgroup>
+
       <thead className="bg-slate-50 text-left">
         <tr>
-          <th className="px-3 py-2">상위</th>
-          <th className="px-3 py-2">항목명</th>
-          <th className="px-3 py-2 text-right">계획</th>
-          <th className="px-3 py-2 text-right">실제(해당 월)</th>
-          <th className="px-3 py-2 text-right">잔액</th>
-          <th className="px-3 py-2">관리</th>
+          <th className="px-2 py-2 sm:px-3 sm:py-2">상위</th>
+          <th className="px-2 py-2 sm:px-3 sm:py-2">항목명</th>
+          <th className="px-2 py-2 text-right sm:px-3 sm:py-2">계획</th>
+          <th className="px-2 py-2 text-right sm:px-3 sm:py-2">실제(해당 월)</th>
+          <th className="px-2 py-2 text-right sm:px-3 sm:py-2">잔액</th>
+          <th className="px-2 py-2 sm:px-3 sm:py-2">관리</th>
         </tr>
       </thead>
+
       <tbody>
-        {list.map(b=> {
-          const actual = actualByBudgetId.get(b.id)||0;
+        {list.map(b => {
+          const actual = actualByBudgetId.get(b.id) || 0;
           const remain = Math.max(b.plan - actual, 0);
           const over = actual > b.plan;
+
           return (
-            <tr key={b.id} className="border-t">
-              <td className="px-3 py-2 whitespace-nowrap">{b.top}</td>
-              <td className="px-3 py-2">
+            <tr key={b.id} className="border-t align-middle">
+              {/* 상위 */}
+              <td className="px-2 py-2 sm:px-3 sm:py-2 whitespace-nowrap">{b.top}</td>
+
+              {/* 항목명: 모바일에선 줄바꿈 허용해 전체 표시, 데스크톱은 한 줄 */}
+              <td className="px-2 py-2 sm:px-3 sm:py-2">
                 <input
-                  ref={(el)=>{nameRefs.current[b.id]=el}}
+                  ref={el => { nameRefs.current[b.id] = el; }}
                   value={editingName[b.id] ?? b.name}
-                  onFocus={()=> setEditingName(prev=> prev[b.id]===undefined? {...prev, [b.id]: b.name }: prev)}
-                  onChange={(e)=> setEditingName(prev=> ({...prev, [b.id]: e.target.value}))}
-                  onBlur={()=>{ const val=editingName[b.id]; if(val!==undefined && val!==b.name){ upsertBudgetItem({ id:b.id, name: val }); } setEditingName(prev=>{ const cp={...prev}; delete cp[b.id]; return cp; }); }}
-                  onKeyDown={(e)=>{ if(e.key==='Enter'){ (e.currentTarget as HTMLInputElement).blur(); } if(e.key==='Escape'){ setEditingName(prev=>{ const cp={...prev}; delete cp[b.id]; return cp; }); (nameRefs.current[b.id]?.blur?.()); } }}
-                  className="w-full rounded-lg border px-2 py-1"
+                  onFocus={() =>
+                    setEditingName(prev => (prev[b.id] === undefined ? { ...prev, [b.id]: b.name } : prev))
+                  }
+                  onChange={e => setEditingName(prev => ({ ...prev, [b.id]: e.target.value }))}
+                  onBlur={() => {
+                    const val = editingName[b.id];
+                    if (val !== undefined && val !== b.name) upsertBudgetItem({ id: b.id, name: val });
+                    setEditingName(prev => { const cp = { ...prev }; delete cp[b.id]; return cp; });
+                  }}
+                  onKeyDown={e => {
+                    if (e.key === "Enter") (e.currentTarget as HTMLInputElement).blur();
+                    if (e.key === "Escape") {
+                      setEditingName(prev => { const cp = { ...prev }; delete cp[b.id]; return cp; });
+                      nameRefs.current[b.id]?.blur?.();
+                    }
+                  }}
+                  className="w-full rounded-lg border px-2 py-1 text-sm sm:text-base leading-snug
+                             sm:whitespace-nowrap break-words"
                 />
               </td>
-              <td className="px-3 py-2 text-right">
+
+              {/* 계획 입력칸: 모바일 좁은 폭 */}
+              <td className="px-2 py-2 sm:px-3 sm:py-2 text-right">
                 <input
-                  ref={(el)=>{planRefs.current[b.id]=el}}
-                  type="text" inputMode="numeric" pattern="[0-9]*"
+                  ref={el => { planRefs.current[b.id] = el; }}
+                  type="text"
+                  inputMode="numeric"
+                  pattern="[0-9]*"
                   value={editingPlan[b.id] ?? String(b.plan)}
-                  onFocus={()=> setEditingPlan(prev=> prev[b.id]===undefined? {...prev, [b.id]: String(b.plan)}: prev)}
-                  onChange={(e)=>{ const digits = e.target.value.replace(/[^0-9]/g,''); setEditingPlan(prev=> ({...prev, [b.id]: digits})); }}
-                  onBlur={()=>{ const val=editingPlan[b.id]; if(val!==undefined && String(b.plan)!==val){ upsertBudgetItem({ id:b.id, plan: Number(val||0)}); } setEditingPlan(prev=>{ const cp={...prev}; delete cp[b.id]; return cp; }); }}
-                  onKeyDown={(e)=>{ if(e.key==='Enter'){ (e.currentTarget as HTMLInputElement).blur(); } if(e.key==='Escape'){ setEditingPlan(prev=>{ const cp={...prev}; delete cp[b.id]; return cp; }); (planRefs.current[b.id]?.blur?.()); } }}
-                  className="w-28 rounded-lg border px-2 py-1 text-right"
+                  onFocus={() =>
+                    setEditingPlan(prev => (prev[b.id] === undefined ? { ...prev, [b.id]: String(b.plan) } : prev))
+                  }
+                  onChange={e => {
+                    const digits = e.target.value.replace(/[^0-9]/g, "");
+                    setEditingPlan(prev => ({ ...prev, [b.id]: digits }));
+                  }}
+                  onBlur={() => {
+                    const val = editingPlan[b.id];
+                    if (val !== undefined && String(b.plan) !== val) upsertBudgetItem({ id: b.id, plan: Number(val || 0) });
+                    setEditingPlan(prev => { const cp = { ...prev }; delete cp[b.id]; return cp; });
+                  }}
+                  onKeyDown={e => {
+                    if (e.key === "Enter") (e.currentTarget as HTMLInputElement).blur();
+                    if (e.key === "Escape") {
+                      setEditingPlan(prev => { const cp = { ...prev }; delete cp[b.id]; return cp; });
+                      planRefs.current[b.id]?.blur?.();
+                    }
+                  }}
+                  className="w-24 sm:w-28 rounded-lg border px-2 py-1 text-right text-sm sm:text-base"
                 />
               </td>
-              <td className="px-3 py-2 text-right">{KRW.format(actual)}</td>
-              <td className="px-3 py-2 text-right">{KRW.format(remain)}</td>
-              <td className="px-3 py-2">
-                <button onClick={()=>deleteBudgetItem(b.id)} className="rounded-lg border px-2 py-1 hover:bg-slate-50">삭제</button>
-                {over && <span className="ml-2 rounded-full bg-rose-100 px-2 py-1 text-xs text-rose-700">100% 초과</span>}
+
+              {/* 실제/잔액: 모바일에선 더 작게, 줄바꿈 없이 */}
+              <td className="px-2 py-2 sm:px-3 sm:py-2 text-right whitespace-nowrap">
+                <span className="font-medium tracking-tight text-[13px] sm:text-base">
+                  {KRW.format(actual)}
+                </span>
+              </td>
+              <td className="px-2 py-2 sm:px-3 sm:py-2 text-right whitespace-nowrap">
+                <span className="font-medium tracking-tight text-[13px] sm:text-base">
+                  {KRW.format(remain)}
+                </span>
+              </td>
+
+              {/* 관리 */}
+              <td className="px-2 py-2 sm:px-3 sm:py-2">
+                <button
+                  onClick={() => deleteBudgetItem(b.id)}
+                  className="rounded-lg border px-2 py-1 hover:bg-slate-50 text-[12px] sm:text-sm"
+                >
+                  삭제
+                </button>
+                {over && (
+                  <span className="ml-1 sm:ml-2 rounded-full bg-rose-100 px-2 py-0.5 text-[10px] sm:text-xs text-rose-700">
+                    100% 초과
+                  </span>
+                )}
               </td>
             </tr>
           );
         })}
       </tbody>
     </table>
-  </div>
-
-  {/* 모바일: 카드형(한 줄에 핵심 정보가 넓게 보이도록) */}
-  <div className="sm:hidden space-y-3">
-    {list.map(b=>{
-      const actual = actualByBudgetId.get(b.id)||0;
-      const remain = Math.max(b.plan - actual, 0);
-      const over = actual > b.plan;
-      return (
-        <div key={b.id} className="rounded-xl border p-3">
-          <div className="mb-2 flex items-center justify-between">
-            <span className="text-xs px-2 py-1 rounded-full border">{b.top}</span>
-            <button onClick={()=>deleteBudgetItem(b.id)} className="text-xs rounded-lg border px-2 py-1">삭제</button>
-          </div>
-
-          {/* 항목명: 전체 폭 사용 */}
-          <div className="mb-2">
-            <label className="text-xs text-slate-500 mb-1 block">항목명</label>
-            <input
-              ref={(el)=>{nameRefs.current[b.id]=el}}
-              value={editingName[b.id] ?? b.name}
-              onFocus={()=> setEditingName(prev=> prev[b.id]===undefined? {...prev, [b.id]: b.name }: prev)}
-              onChange={(e)=> setEditingName(prev=> ({...prev, [b.id]: e.target.value}))}
-              onBlur={()=>{ const val=editingName[b.id]; if(val!==undefined && val!==b.name){ upsertBudgetItem({ id:b.id, name: val }); } setEditingName(prev=>{ const cp={...prev}; delete cp[b.id]; return cp; }); }}
-              onKeyDown={(e)=>{ if(e.key==='Enter'){ (e.currentTarget as HTMLInputElement).blur(); } if(e.key==='Escape'){ setEditingName(prev=>{ const cp={...prev}; delete cp[b.id]; return cp; }); (nameRefs.current[b.id]?.blur?.()); } }}
-              className="w-full rounded-lg border px-3 py-2 text-base"
-              placeholder="항목명"
-            />
-          </div>
-
-          {/* 금액/실제/잔액: 2열 그리드로 촘촘하게 */}
-          <div className="grid grid-cols-2 gap-2">
-            <div>
-              <label className="text-xs text-slate-500 mb-1 block">계획</label>
-              <input
-                ref={(el)=>{planRefs.current[b.id]=el}}
-                type="text" inputMode="numeric" pattern="[0-9]*"
-                value={editingPlan[b.id] ?? String(b.plan)}
-                onFocus={()=> setEditingPlan(prev=> prev[b.id]===undefined? {...prev, [b.id]: String(b.plan)}: prev)}
-                onChange={(e)=>{ const digits = e.target.value.replace(/[^0-9]/g,''); setEditingPlan(prev=> ({...prev, [b.id]: digits})); }}
-                onBlur={()=>{ const val=editingPlan[b.id]; if(val!==undefined && String(b.plan)!==val){ upsertBudgetItem({ id:b.id, plan: Number(val||0)}); } setEditingPlan(prev=>{ const cp={...prev}; delete cp[b.id]; return cp; }); }}
-                onKeyDown={(e)=>{ if(e.key==='Enter'){ (e.currentTarget as HTMLInputElement).blur(); } if(e.key==='Escape'){ setEditingPlan(prev=>{ const cp={...prev}; delete cp[b.id]; return cp; }); (planRefs.current[b.id]?.blur?.()); } }}
-                className="w-full rounded-lg border px-3 py-2 text-right"
-                placeholder="0"
-              />
-            </div>
-            <div>
-              <label className="text-xs text-slate-500 mb-1 block">실제(해당 월)</label>
-              <div className="h-[42px] flex items-center justify-end rounded-lg border px-3">
-                <span className="font-semibold">{KRW.format(actual)}</span>
-              </div>
-            </div>
-            <div>
-              <label className="text-xs text-slate-500 mb-1 block">잔액</label>
-              <div className="h-[42px] flex items-center justify-end rounded-lg border px-3">
-                <span className="font-semibold">{KRW.format(remain)}</span>
-              </div>
-            </div>
-            {/* 경고 배지 */}
-            {over && (
-              <div className="flex items-center">
-                <span className="ml-auto rounded-full bg-rose-100 px-2 py-1 text-[11px] text-rose-700">
-                  100% 초과
-                </span>
-              </div>
-            )}
-          </div>
-        </div>
-      );
-    })}
   </div>
 </Section>
 
