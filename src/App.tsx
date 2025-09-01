@@ -630,15 +630,15 @@ export default function BudgetApp() {
 <Section title="항목 목록">
   {/* 휴대폰에선 컴팩트 폰트/패딩, 데스크톱은 기존 크기 유지 */}
   <div className="-mx-2 overflow-x-auto sm:mx-0">
-   <table className="min-w-[760px] sm:min-w-full text-xs sm:text-sm table-fixed">
-  <colgroup>
-    <col className="w-[56px] sm:w-[72px]" />      {/* 상위 */}
-    <col className="w-[280px] sm:w-auto" />       {/* 항목명: 넓게 확보 */}
-    <col className="w-[120px]" />                 {/* 계획 */}
-    <col className="w-[140px]" />                 {/* 실제 */}
-    <col className="w-[140px]" />                 {/* 잔액 */}
-    <col className="w-[80px] sm:w-[100px]" />     {/* 관리 */}
-  </colgroup>
+   <table className="min-w-[640px] sm:min-w-full text-xs sm:text-sm table-fixed">
+ <colgroup>
+  <col className="w-[56px] sm:w-[72px]" />      {/* 상위 */}
+  <col className="w-[160px] sm:w-auto" />       {/* 항목명: ↓ 줄였음 */}
+  <col className="w-[120px]" />                 {/* 계획 */}
+  <col className="w-[140px]" />                 {/* 실제 */}
+  <col className="w-[140px]" />                 {/* 잔액 */}
+  <col className="w-[80px] sm:w-[100px]" />     {/* 관리 */}
+</colgroup>
 
       <thead className="bg-slate-50 text-left">
         <tr>
