@@ -281,25 +281,8 @@ export default function BudgetApp() {
   const remainSum = Math.max(planSum - spentSum, 0);
 
   // ===== 홈: 지출 기입칸 =====
-  const [quick, setQuick] = useState<{
-    date: string;
-    item: string;
-    amount: string;
-    memo: string;
-  }>({
-    date: todayStr(),
-    item: consumptionItems[0]?.name || "",
-    amount: "",
-    memo: "",
-  });
   
-  useEffect(() => {
-    // 월/항목 변경 시 기본값 보정
-    setQuick((q) => ({
-      ...q,
-      item: q.item || consumptionItems[0]?.name || "",
-    }));
-  }, [consumptionItems.length]);
+  
 
   function addTx(tx: Tx) {
     setState((prev) => ({ ...prev, txs: [{ ...tx, id: uid() }, ...prev.txs] }));
@@ -340,6 +323,23 @@ export default function BudgetApp() {
 
 // ===== 화면들 =====
 function HomeView() {
+  const dateRef = useRef<HTMLInputElement>(null);
+  const itemRef = useRef<HTMLSelectElement>(null);
+  const amountRef = useRef<HTMLInputElement>(null);
+  const memoRef = useRef<HTMLInputElement>(null);
+
+  function handleSubmit() {
+    const date = dateRef.current?.value || todayStr();
+    const item = itemRef.current?.value || "";
+    const memo = memoRef.current?.value || "";
+    const amt = Number(amountRef.current?.value.replace(/[^0-9]/g, ""));
+    if (!item) return alert("항목을 선택하세요");
+    if (!amt || amt <= 0) return alert("금액을 입력하세요");
+    addTx({ id: "", date, top: "소비", item, amount: amt, memo });
+    if (amountRef.current) amountRef.current.value = "";
+    if (memoRef.current) memoRef.current.value = "";
+  }
+
   return (
     <div className="space-y-4">
       <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-end">
@@ -395,74 +395,64 @@ function HomeView() {
         </div>
       </Section>
 
-<Section title="지출 기입 칸">
-  <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">
-    <Field label="날짜">
-      <input
-        type="date"
-        value={quick.date}
-        onChange={(e) => setQuick(v => ({ ...v, date: e.target.value }))}
-        className="w-full rounded-xl border px-3 py-2"
-      />
-    </Field>
+      <Section title="지출 기입 칸">
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">
+          <Field label="날짜">
+            <input
+              type="date"
+              ref={dateRef}
+              defaultValue={todayStr()}
+              className="w-full rounded-xl border px-3 py-2"
+            />
+          </Field>
 
-    <Field label="항목(소비)">
-      <select
-        value={quick.item}
-        onChange={(e) => setQuick(v => ({ ...v, item: e.target.value }))}
-        className="w-full rounded-xl border px-3 py-2"
-      >
-        <option value="">선택</option>
-        {consumptionItems.map(b => (
-          <option key={b.id} value={b.name}>{b.name}</option>
-        ))}
-      </select>
-    </Field>
+          <Field label="항목(소비)">
+            <select
+              ref={itemRef}
+              defaultValue={consumptionItems[0]?.name || ""}
+              className="w-full rounded-xl border px-3 py-2"
+            >
+              <option value="">선택</option>
+              {consumptionItems.map((b) => (
+                <option key={b.id} value={b.name}>
+                  {b.name}
+                </option>
+              ))}
+            </select>
+          </Field>
 
-    <Field label="금액">
-      <input
-        type="text"
-        inputMode="numeric"
-        /* ⛔ pattern 제거: 일부 인앱에서 포커스 깨짐 유발 */
-        value={quick.amount}
-        onChange={(e) => {
-          const digits = e.target.value.replace(/[^0-9]/g, "");
-          setQuick(v => ({ ...v, amount: digits }));
-        }}
-        /* 엔터 눌러도 폼 제출 없으니 특별 처리 불필요 */
-        autoComplete="off"
-        enterKeyHint="done"
-        className="w-full rounded-xl border px-3 py-2"
-        placeholder="예: 50000"
-      />
-    </Field>
+          <Field label="금액">
+            <input
+              ref={amountRef}
+              type="text"
+              inputMode="numeric"
+              autoComplete="off"
+              enterKeyHint="done"
+              className="w-full rounded-xl border px-3 py-2"
+              placeholder="예: 50000"
+            />
+          </Field>
 
-    <Field label="메모(선택)">
-      <input
-        value={quick.memo}
-        onChange={(e) => setQuick(v => ({ ...v, memo: e.target.value }))}
-        autoComplete="off"
-        className="w-full rounded-xl border px-3 py-2"
-      />
-    </Field>
+          <Field label="메모(선택)">
+            <input
+              ref={memoRef}
+              type="text"
+              autoComplete="off"
+              className="w-full rounded-xl border px-3 py-2"
+            />
+          </Field>
 
-    <div className="flex items-end">
-      <button
-        type="button" // ✅ submit 아님
-        onClick={() => {
-          const amt = Number(String(quick.amount).replace(/[^0-9]/g, ""));
-          if (!quick.item) { alert("항목을 선택하세요"); return; }
-          if (!amt || amt <= 0) { alert("금액을 입력하세요"); return; }
-          addTx({ id: "", date: quick.date, top: "소비", item: quick.item, amount: amt, memo: quick.memo });
-          setQuick({ date: quick.date, item: quick.item, amount: "", memo: "" });
-        }}
-        className="w-full rounded-xl bg-black px-4 py-3 text-white hover:opacity-90"
-      >
-        + 기입하기
-      </button>
-    </div>
-  </div>
-</Section>
+          <div className="flex items-end">
+            <button
+              type="button"
+              onClick={handleSubmit}
+              className="w-full rounded-xl bg-black px-4 py-3 text-white hover:opacity-90"
+            >
+              + 기입하기
+            </button>
+          </div>
+        </div>
+      </Section>
 
       <TabBar value={tab} onChange={setTab} />
     </div>
