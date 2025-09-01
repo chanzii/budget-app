@@ -462,16 +462,10 @@ export default function BudgetApp() {
                 pattern="[0-9]*"
                 value={quick.amount}
                 onChange={(e) => {
-                  const digits = e.target.value.replace(/[^0-9]/g, "");
-                  setQuick((v) => ({ ...v, amount: digits }));
-                  requestAnimationFrame(() => {
-                    const el = amountRef.current;
-                    if (!el) return;
-                    const pos = el.value.length;
-                    el.focus();
-                    el.setSelectionRange(pos, pos);
-                  });
-                }}
+  const digits = e.target.value.replace(/[^0-9]/g, "");
+  setQuick((v) => ({ ...v, amount: digits }));
+  // requestAnimationFrame 제거
+}}
                 onPaste={(e) => {
                   const t = (e.clipboardData.getData("text") || "").replace(
                     /[^0-9]/g,
