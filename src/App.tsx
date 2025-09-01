@@ -454,61 +454,44 @@ export default function BudgetApp() {
                 ))}
               </select>
             </Field>
-            <Field label="금액">
-              <input
-                ref={amountRef}
-                type="text"
-                inputMode="numeric"
-                pattern="[0-9]*"
-                value={quick.amount}
-                onChange={(e) => {
-  const digits = e.target.value.replace(/[^0-9]/g, "");
-  setQuick((v) => ({ ...v, amount: digits }));
-  // requestAnimationFrame 제거
-}}
-                onPaste={(e) => {
-                  const t = (e.clipboardData.getData("text") || "").replace(
-                    /[^0-9]/g,
-                    ""
-                  );
-                  e.preventDefault();
-                  setQuick((v) => ({ ...v, amount: t }));
-                  requestAnimationFrame(() => {
-                    const el = amountRef.current;
-                    if (el) {
-                      const pos = el.value.length;
-                      el.focus();
-                      el.setSelectionRange(pos, pos);
-                    }
-                  });
-                }}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") {
-                    e.preventDefault();
-                  }
-                }}
-                className="w-full rounded-xl border px-3 py-2"
-                placeholder="예: 50000"
-              />
-            </Field>
-            <Field label="메모(선택)">
-              <input
-                ref={memoRef}
-                value={quick.memo}
-                onChange={(e) => {
-                  const val = e.target.value;
-                  setQuick((v) => ({ ...v, memo: val }));
-                  requestAnimationFrame(() => {
-                    const el = memoRef.current;
-                    if (!el) return;
-                    const pos = el.value.length;
-                    el.focus();
-                    el.setSelectionRange(pos, pos);
-                  });
-                }}
-                className="w-full rounded-xl border px-3 py-2"
-              />
-            </Field>
+          <Field label="금액">
+  <input
+    ref={amountRef}
+    type="tel"                // ← 모바일 키패드 안정적
+    inputMode="numeric"
+    autoComplete="off"
+    enterKeyHint="done"
+    value={quick.amount}
+    onChange={(e) => {
+      const digits = e.target.value.replace(/[^0-9]/g, "");
+      setQuick((v) => ({ ...v, amount: digits }));
+      // ⛔️ requestAnimationFrame + focus/selectionRange 모두 제거
+    }}
+    onPaste={(e) => {
+      const t = (e.clipboardData.getData("text") || "").replace(/[^0-9]/g, "");
+      e.preventDefault();
+      setQuick((v) => ({ ...v, amount: t }));
+      // ⛔️ 여기서도 강제 포커스 제거
+    }}
+    onKeyDown={(e) => {
+      if (e.key === "Enter") e.preventDefault();
+    }}
+    className="w-full rounded-xl border px-3 py-2"
+    placeholder="예: 50000"
+  />
+</Field>
+           <Field label="메모(선택)">
+  <input
+    ref={memoRef}
+    value={quick.memo}
+    onChange={(e) => {
+      setQuick((v) => ({ ...v, memo: e.target.value }));
+      // ⛔️ requestAnimationFrame + focus/selectionRange 제거
+    }}
+    autoComplete="off"
+    className="w-full rounded-xl border px-3 py-2"
+  />
+</Field>
             <div className="flex items-end">
               <button className="w-full rounded-xl bg-black px-4 py-3 text-white hover:opacity-90">
                 + 기입하기
