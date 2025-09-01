@@ -383,11 +383,17 @@ export default function BudgetApp() {
                  <XAxis
   dataKey="name"
   interval={0}
-  height={100}
-  angle={-60}
-  textAnchor="end"
-  tickMargin={10}
-  tick={{ fontSize: 12 }}
+  height={80}
+  tick={(props: any) => {
+    const { x, y, payload } = props;
+    return (
+      <g transform={`translate(${x},${y})`}>
+        <text dy={16} textAnchor="end" transform="rotate(-60)" style={{ fontSize: 12 }}>
+          {payload.value}
+        </text>
+      </g>
+    );
+  }}
 />
                   <YAxis domain={[0, 100]} ticks={[0, 25, 50, 75, 100]} />
                   {/* 🔧 (수정) 미사용 파라미터 경고 제거 */}
@@ -830,22 +836,21 @@ export default function BudgetApp() {
           />
         </div>
 
-        <Section title="소비 요약">
-          <div className="grid gap-3 sm:grid-cols-3">
-            <div className="rounded-2xl bg-slate-50 p-4">
-              <div className="text-slate-500">소비 계획 합계</div>
-              <div className="text-xl font-semibold">{KRW.format(planSum)}</div>
-            </div>
-            <div className="rounded-2xl bg-slate-50 p-4">
-              <div className="text-slate-500">소비 실제 합계</div>
-              <div className="text-xl font-semibold">{KRW.format(spentSum)}</div>
-            </div>
-            <div className="rounded-2xl bg-slate-50 p-4">
-              <div className="text-slate-500">소비 잔액</div>
-              <div className="text-xl font-semibold">{KRW.format(remainSum)}</div>
-            </div>
-          </div>
-        </Section>
+        <Section title="항목별 지출(해당 월)">
+  <ul className="divide-y rounded-2xl border">
+    {chartData.map((d) => (
+      <li key={d.name} className="flex items-center justify-between px-4 py-3">
+        <span className="truncate pr-3 text-sm">{d.name}</span>
+        <span className="whitespace-nowrap font-semibold">{KRW.format(d.actual)}</span>
+      </li>
+    ))}
+  </ul>
+
+  <div className="mt-3 flex items-center justify-between rounded-2xl bg-slate-50 px-4 py-3">
+    <span className="text-slate-600">합계</span>
+    <span className="text-lg font-bold">{KRW.format(spentSum)}</span>
+  </div>
+</Section>
 
         <Section title="항목별 집행률(%)">
           <div className="h-64 w-full">
@@ -858,11 +863,17 @@ export default function BudgetApp() {
                 <XAxis
   dataKey="name"
   interval={0}
-  height={100}        // 회전 레이블 공간 확보
-  angle={-60}         // 세로에 가깝게 회전
-  textAnchor="end"    // 끝쪽 정렬로 겹침 방지
-  tickMargin={10}     // 축과 레이블 간격
-  tick={{ fontSize: 12 }}
+  height={80}
+  tick={(props: any) => {
+    const { x, y, payload } = props;
+    return (
+      <g transform={`translate(${x},${y})`}>
+        <text dy={16} textAnchor="end" transform="rotate(-60)" style={{ fontSize: 12 }}>
+          {payload.value}
+        </text>
+      </g>
+    );
+  }}
 />
                 <YAxis domain={[0, 100]} />
                 {/* 🔧 (수정) 미사용 파라미터 경고 제거 */}
