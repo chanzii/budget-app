@@ -337,162 +337,137 @@ export default function BudgetApp() {
     }));
   }
 
-  // ===== 화면들 =====
-  function HomeView() {
-    return (
-      <div className="space-y-4">
-        <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-end">
-          <div className="flex items-center gap-2">
-            <input
-              type="month"
-              value={month}
-              onChange={(e) => setMonth(e.target.value)}
-              className="rounded-xl border px-3 py-2"
-            />
-          </div>
-        </div>
 
-        <Section
-          title="소비 레포트"
-          right={<span className="text-sm text-slate-500">항목별 집행률(%)</span>}
-        >
-          {chartData.length > 0 ? (
-            <div className="h-64 w-full">
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart
-                  data={chartData}
-                  margin={{ top: 10, right: 10, bottom: 10, left: 0 }}
-                >
-                  <CartesianGrid strokeDasharray="3 3" />
-                 <XAxis
-  dataKey="name"
-  interval={0}
-  height={80}
-  tick={(props: any) => {
-    const { x, y, payload } = props;
-    return (
-      <g transform={`translate(${x},${y})`}>
-        <text dy={16} textAnchor="end" transform="rotate(-60)" style={{ fontSize: 12 }}>
-          {payload.value}
-        </text>
-      </g>
-    );
-  }}
-/>
-                  <YAxis domain={[0, 100]} ticks={[0, 25, 50, 75, 100]} />
-                  {/* 🔧 (수정) 미사용 파라미터 경고 제거 */}
-                  <Tooltip
-                    formatter={(v: any, n: any, p: any) => {
-                      void n;
-                      return [v + "%", p.payload.name];
-                    }}
-                  />
-                  <ReferenceLine y={100} stroke="#ef4444" strokeDasharray="4 4" />
-                  <Bar dataKey="rate">
-                    {chartData.map((d, idx) => (
-                      <Cell key={idx} fill={d.color} />
-                    ))}
-                  </Bar>
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
-          ) : (
-            <div className="py-8 text-center text-slate-500">
-              소비 항목이 없습니다. 예산계획에서 항목을 추가하세요.
-            </div>
-          )}
-          <div className="mt-3 text-sm leading-6">
-            <div>
-              이달 소비 지출액: <strong>{KRW.format(spentSum)}</strong>
-            </div>
-            <div>
-              이달 소비 잔액: <strong>{KRW.format(remainSum)}</strong>
-            </div>
+// ===== 화면들 =====
+function HomeView() {
+  return (
+    <div className="space-y-4">
+      <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-end">
+        <div className="flex items-center gap-2">
+          <input
+            type="month"
+            value={month}
+            onChange={(e) => setMonth(e.target.value)}
+            className="rounded-xl border px-3 py-2"
+          />
+        </div>
+      </div>
+
+      <Section
+        title="소비 레포트"
+        right={<span className="text-sm text-slate-500">항목별 집행률(%)</span>}
+      >
+        {chartData.length > 0 ? (
+          <div className="h-64 w-full">
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={chartData} margin={{ top: 10, right: 10, bottom: 10, left: 0 }}>
+                <CartesianGrid strokeDasharray="3 3" />
+                <XAxis
+                  dataKey="name"
+                  interval={0}
+                  height={100}
+                  angle={-60}
+                  textAnchor="end"
+                  tickMargin={10}
+                  tick={{ fontSize: 12 }}
+                />
+                <YAxis domain={[0, 100]} ticks={[0, 25, 50, 75, 100]} />
+                <Tooltip
+                  formatter={(v: any, _n: any, p: any) => [v + "%", p.payload.name]}
+                />
+                <ReferenceLine y={100} stroke="#ef4444" strokeDasharray="4 4" />
+                <Bar dataKey="rate">
+                  {chartData.map((d, idx) => (
+                    <Cell key={idx} fill={d.color} />
+                  ))}
+                </Bar>
+              </BarChart>
+            </ResponsiveContainer>
           </div>
-        </Section>
+        ) : (
+          <div className="py-8 text-center text-slate-500">
+            소비 항목이 없습니다. 예산계획에서 항목을 추가하세요.
+          </div>
+        )}
+        <div className="mt-3 text-sm leading-6">
+          <div>이달 소비 지출액: <strong>{KRW.format(spentSum)}</strong></div>
+          <div>이달 소비 잔액: <strong>{KRW.format(remainSum)}</strong></div>
+        </div>
+      </Section>
 
       <Section title="지출 기입 칸">
-  <form
-    onSubmit={(e) => {
-      e.preventDefault();
-      const amt = Number(String(quick.amount).replace(/[^0-9]/g, ""));
-      if (!quick.item) return alert("항목을 선택하세요");
-      if (!amt || amt <= 0) return alert("금액을 입력하세요");
-      addTx({
-        id: "",
-        date: quick.date,
-        top: "소비",
-        item: quick.item,
-        amount: amt,
-        memo: quick.memo,
-      });
-      setQuick((v) => ({ ...v, amount: "", memo: "" }));
-    }}
-    className="grid grid-cols-2 gap-3 sm:grid-cols-5"
-  >
-    <Field label="날짜">
-      <input
-        type="date"
-        value={quick.date}
-        onChange={(e) => setQuick((v) => ({ ...v, date: e.target.value }))}
-        className="w-full rounded-xl border px-3 py-2"
-      />
-    </Field>
+        <form
+          className="grid grid-cols-2 gap-3 sm:grid-cols-5"
+          onSubmit={(e) => {
+            e.preventDefault();
+            const amt = Number(String(quick.amount).replace(/[^0-9]/g, ""));
+            if (!quick.item) { alert("항목을 선택하세요"); return; }
+            if (!amt || amt <= 0) { alert("금액을 입력하세요"); return; }
+            addTx({ id: "", date: quick.date, top: "소비", item: quick.item, amount: amt, memo: quick.memo });
+            setQuick({ date: quick.date, item: quick.item, amount: "", memo: "" });
+          }}
+        >
+          <Field label="날짜">
+            <input
+              type="date"
+              value={quick.date}
+              onChange={(e) => setQuick(v => ({ ...v, date: e.target.value }))}
+              className="w-full rounded-xl border px-3 py-2"
+            />
+          </Field>
 
-    <Field label="항목(소비)">
-      <select
-        value={quick.item}
-        onChange={(e) => setQuick((v) => ({ ...v, item: e.target.value }))}
-        className="w-full rounded-xl border px-3 py-2"
-      >
-        <option value="">선택</option>
-        {consumptionItems.map((b) => (
-          <option key={b.id} value={b.name}>
-            {b.name}
-          </option>
-        ))}
-      </select>
-    </Field>
+          <Field label="항목(소비)">
+            <select
+              value={quick.item}
+              onChange={(e) => setQuick(v => ({ ...v, item: e.target.value }))}
+              className="w-full rounded-xl border px-3 py-2"
+            >
+              <option value="">선택</option>
+              {consumptionItems.map(b => (
+                <option key={b.id} value={b.name}>{b.name}</option>
+              ))}
+            </select>
+          </Field>
 
-    <Field label="금액">
-      <input
-        type="tel"             // 모바일 키패드 안정적
-        inputMode="numeric"
-        autoComplete="off"
-        enterKeyHint="done"
-        value={quick.amount}
-        onChange={(e) => {
-          const digits = e.target.value.replace(/[^0-9]/g, "");
-          setQuick((v) => ({ ...v, amount: digits }));
-        }}
-        className="w-full rounded-xl border px-3 py-2"
-        placeholder="예: 50000"
-      />
-    </Field>
+          <Field label="금액">
+            <input
+              type="text"
+              inputMode="numeric"
+              pattern="[0-9]*"
+              value={quick.amount}
+              onChange={(e) => {
+                const digits = e.target.value.replace(/[^0-9]/g, "");
+                setQuick(v => ({ ...v, amount: digits }));
+              }}
+              onKeyDown={(e) => {
+                // 엔터: 폼 submit, 한글자 입력 후 키패드 닫힘 방지용으로 추가 핸들링 없음
+                if (e.key === "Enter") return;
+              }}
+              className="w-full rounded-xl border px-3 py-2"
+              placeholder="예: 50000"
+            />
+          </Field>
 
-    <Field label="메모(선택)">
-      <input
-        value={quick.memo}
-        onChange={(e) => setQuick((v) => ({ ...v, memo: e.target.value }))}
-        autoComplete="off"
-        className="w-full rounded-xl border px-3 py-2"
-      />
-    </Field>
+          <Field label="메모(선택)">
+            <input
+              value={quick.memo}
+              onChange={(e) => setQuick(v => ({ ...v, memo: e.target.value }))}
+              className="w-full rounded-xl border px-3 py-2"
+            />
+          </Field>
 
-    <div className="flex items-end">
-      <button
-        type="submit"
-        className="w-full rounded-xl bg-black px-4 py-3 text-white hover:opacity-90"
-      >
-        + 기입하기
-      </button>
+          <div className="flex items-end">
+            <button className="w-full rounded-xl bg-black px-4 py-3 text-white hover:opacity-90">
+              + 기입하기
+            </button>
+          </div>
+        </form>
+      </Section>
+
+      <TabBar value={tab} onChange={setTab} />
     </div>
-  </form>
-</Section>
-        <TabBar value={tab} onChange={setTab} />
-      </div>
-    );
-  }
+  );
+}
 
   function ListView() {
     const txs = monthTxs.filter((t) => t.top === "소비");
