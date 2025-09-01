@@ -630,15 +630,16 @@ export default function BudgetApp() {
 <Section title="항목 목록">
   {/* 휴대폰에선 컴팩트 폰트/패딩, 데스크톱은 기존 크기 유지 */}
   <div className="overflow-x-auto sm:overflow-visible">
-    <table className="min-w-full text-xs sm:text-sm table-fixed">
+    <table className="min-w-full text-xs sm:text-sm table-auto sm:table-fixed">
       {/* 열 너비: 모바일에선 항목명이 넓게(56%), 숫자칸은 고정 폭 */}
       <colgroup>
-        <col className="w-[64px] sm:w-[80px]" />         {/* 상위 */}
-        <col className="w-[56%] sm:w-auto" />            {/* 항목명 (모바일에서 가장 넓게) */}
-        <col className="w-[92px] sm:w-[120px]" />        {/* 계획 */}
-        <col className="w-[104px] sm:w-[140px]" />       {/* 실제 */}
-        <col className="w-[92px] sm:w-[120px]" />        {/* 잔액 */}
-        <col className="w-[72px] sm:w-[100px]" />        {/* 관리 */}
+        {/* 모바일 합계(고정폭) ≈ 44+74+84+84+46 = 332px → 항목명에 넓이 몰아주기 */}
+  <col className="w-[44px] sm:w-[80px]" />     {/* 상위 */}
+  <col className="w-[56%] sm:w-auto" />        {/* 항목명(가장 넓게) */}
+  <col className="w-[74px] sm:w-[120px]" />    {/* 계획 */}
+  <col className="w-[84px] sm:w-[140px]" />    {/* 실제 */}
+  <col className="w-[84px] sm:w-[120px]" />    {/* 잔액 */}
+  <col className="w-[46px] sm:w-[100px]" />    {/* 관리 */}
       </colgroup>
 
       <thead className="bg-slate-50 text-left">
@@ -684,8 +685,7 @@ export default function BudgetApp() {
                       nameRefs.current[b.id]?.blur?.();
                     }
                   }}
-                  className="w-full rounded-lg border px-2 py-1 text-sm sm:text-base leading-snug
-                             sm:whitespace-nowrap break-words"
+                  className="w-full rounded-lg border px-1.5 py-1 text-[13px] sm:text-base leading-tight sm:whitespace-nowrap break-words"
                 />
               </td>
 
