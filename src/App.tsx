@@ -904,31 +904,27 @@ function ListView({
 }
               >
                 <div className="text-[11px] leading-none text-slate-500">{c.label}</div>
-        {(() => {
+      {(() => {
   const sum = c.sum || 0;
-
-  // '원' 없이 숫자만 쉼표 포함해서 표시
-  const text = sum.toLocaleString("ko-KR");
-
-  // 숫자 자릿수 (쉼표 제외)
+  const text = sum.toLocaleString("ko-KR");      // '원' 없이 숫자만
   const digitCount = String(sum).length;
-
-  // 자릿수별 폰트 크기 조절
   const fontSize =
     digitCount <= 4 ? 11 :
     digitCount === 5 ? 10 :
-    digitCount === 6 ? 9 :
-    8; // 7자리 이상
+    digitCount === 6 ? 9 : 8;
 
   return (
-    <div
-      className={
-        "mt-1 w-full px-0.5 leading-tight font-semibold text-center " +
-        (sum > 0 ? "text-rose-600" : "text-slate-400")
-      }
-      style={{ fontSize }}
-    >
-      {c.date ? (sum ? text : "0") : ""}
+    // ⬇⬇ 핵심: w-full + flex + justify-center 로 가로 중앙 정렬
+    <div className="mt-1 w-full px-0.5 flex justify-center">
+      <span
+        className={
+          "leading-tight font-semibold text-center tabular-nums " + // 숫자 폭 균일
+          (sum > 0 ? "text-rose-600" : "text-slate-400")
+        }
+        style={{ fontSize }}
+      >
+        {c.date ? (sum ? text : "0") : ""}
+      </span>
     </div>
   );
 })()}
