@@ -99,6 +99,26 @@ function parseDate(s: string) {
   const [y, m, d] = s.split("-").map(Number);
   return new Date(y, m - 1, d);
 }
+// 금액 축약 (10만 초과일 때만)
+function formatKRWCompact(n: number) {
+  if (n >= 100000000) return Math.round(n / 100000000) + "억";
+  if (n >= 10000) return Math.round(n / 10000) + "만";
+  return KRW.format(n);
+}
+
+// 캘린더 셀용 표시 문자열과 폰트 크기 계산
+function getCalendarAmount(n: number) {
+  // 10만 이하는 축약 금지, 글자수에 따라 폰트만 살짝 줄임
+  const show = n <= 100000 ? KRW.format(n) : formatKRWCompact(n);
+  // 숫자 길이에 따라 폰트 크기 결정(폰 화면 기준)
+  const digitLen = String(n).length; // 쉼표/원/₩ 제외
+  let fontSize = 11;                 // 기본 11px
+  if (n <= 100000) {
+    if (digitLen >= 6) fontSize = 10;  // 10만(6자리) 근처면 10px
+    if (digitLen >= 7) fontSize = 9;   // 혹시 99,999 같은 경우 대비
+  }
+  return { text: show, fontSize };
+}
 // (추가) 캘린더 헬퍼
 function daysInMonth(y: number, m: number) {
   return new Date(y, m, 0).getDate(); // m: 1~12
@@ -902,14 +922,21 @@ function ListView({
 }
               >
                 <div className="text-[11px] leading-none text-slate-500">{c.label}</div>
-                <div
-  className={
-    "mt-1 w-full px-1 text-[10px] sm:text-[11px] leading-tight font-semibold truncate " +
-    ((c.sum||0)>0 ? "text-rose-600" : "text-slate-400")
-  }
->
-  {c.date ? (c.sum ? KRW.format(c.sum) : "0원") : ""}
-</div>
+                {(() => {
+  const sum = c.sum || 0;
+  const { text, fontSize } = getCalendarAmount(sum);
+  return (
+    <div
+      className={
+        "mt-1 w-full px-1 leading-tight font-semibold whitespace-nowrap " +
+        (sum > 0 ? "text-rose-600" : "text-slate-400")
+      }
+      style={{ fontSize: fontSize }}
+    >
+      {c.date ? (sum ? text : "0원") : ""}
+    </div>
+  );
+})()}
               </button>
             );
           })}
