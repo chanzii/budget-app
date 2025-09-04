@@ -99,26 +99,8 @@ function parseDate(s: string) {
   const [y, m, d] = s.split("-").map(Number);
   return new Date(y, m - 1, d);
 }
-// 금액 축약 (10만 초과일 때만)
-function formatKRWCompact(n: number) {
-  if (n >= 100000000) return Math.round(n / 100000000) + "억";
-  if (n >= 10000) return Math.round(n / 10000) + "만";
-  return KRW.format(n);
-}
 
-// 캘린더 셀용 표시 문자열과 폰트 크기 계산
-function getCalendarAmount(n: number) {
-  // 10만 이하는 축약 금지, 글자수에 따라 폰트만 살짝 줄임
-  const show = n <= 100000 ? KRW.format(n) : formatKRWCompact(n);
-  // 숫자 길이에 따라 폰트 크기 결정(폰 화면 기준)
-  const digitLen = String(n).length; // 쉼표/원/₩ 제외
-  let fontSize = 11;                 // 기본 11px
-  if (n <= 100000) {
-    if (digitLen >= 6) fontSize = 10;  // 10만(6자리) 근처면 10px
-    if (digitLen >= 7) fontSize = 9;   // 혹시 99,999 같은 경우 대비
-  }
-  return { text: show, fontSize };
-}
+
 // (추가) 캘린더 헬퍼
 function daysInMonth(y: number, m: number) {
   return new Date(y, m, 0).getDate(); // m: 1~12
@@ -916,27 +898,35 @@ function ListView({
                   setFilterItem(null);    // 항목 필터 초기화(원하면 유지 가능)
                   setTab("list");         // 소비내역으로 이동
                 }}
-               className={
-  "h-16 p-1 min-w-0 rounded-lg border flex flex-col items-center justify-center " +
+             className={
+  "h-16 p-1 min-w-0 rounded-lg border flex flex-col items-center justify-center overflow-hidden " +
   (clickable ? "hover:bg-slate-50" : "bg-slate-50/40 text-slate-400")
 }
               >
                 <div className="text-[11px] leading-none text-slate-500">{c.label}</div>
-                {(() => {
+              {(() => {
   const sum = c.sum || 0;
-  const { text, fontSize } = getCalendarAmount(sum);
+  // 10만 이하는 축약 없이 전부 표시
+  const text = sum <= 100000 ? KRW.format(sum)
+                             : (sum >= 100000000 ? Math.round(sum/100000000) + "억"
+                                                 : Math.round(sum/10000) + "만");
+  // 10만 이하는 글자수에 따라 조금 더 줄임
+  const digitLen = String(sum).length;
+  const fontSize = sum <= 100000 ? (digitLen >= 6 ? 9 : 10) : 10;
+
   return (
     <div
       className={
-        "mt-1 w-full px-1 leading-tight font-semibold whitespace-nowrap " +
+        "mt-1 w-full px-1 leading-tight font-semibold text-center whitespace-nowrap " +
         (sum > 0 ? "text-rose-600" : "text-slate-400")
       }
-      style={{ fontSize: fontSize }}
+      style={{ fontSize }}
     >
       {c.date ? (sum ? text : "0원") : ""}
     </div>
   );
 })()}
+
               </button>
             );
           })}
