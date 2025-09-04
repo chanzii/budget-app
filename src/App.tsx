@@ -904,20 +904,26 @@ function ListView({
 }
               >
                 <div className="text-[11px] leading-none text-slate-500">{c.label}</div>
-              {(() => {
+          {(() => {
   const sum = c.sum || 0;
-  // 10만 이하는 축약 없이 전부 표시
-  const text = sum <= 100000 ? KRW.format(sum)
-                             : (sum >= 100000000 ? Math.round(sum/100000000) + "억"
-                                                 : Math.round(sum/10000) + "만");
-  // 10만 이하는 글자수에 따라 조금 더 줄임
-  const digitLen = String(sum).length;
-  const fontSize = sum <= 100000 ? (digitLen >= 6 ? 9 : 10) : 10;
+
+  // 원 단위 전체 표시
+  const text = `${sum.toLocaleString("ko-KR")}원`;
+
+  // 금액 텍스트 길이에 따라 폰트 크기 자동 결정
+  const digitCount = text.replace(/[^0-9]/g, "").length;
+
+  // 자릿수에 따른 폰트 사이즈
+  const fontSize =
+    digitCount <= 4 ? 11 :
+    digitCount === 5 ? 10 :
+    digitCount === 6 ? 9 :
+    8; // 7자리 이상
 
   return (
     <div
       className={
-        "mt-1 w-full px-1 leading-tight font-semibold text-center whitespace-nowrap " +
+        "mt-1 w-full px-0.5 leading-tight font-semibold text-center " +
         (sum > 0 ? "text-rose-600" : "text-slate-400")
       }
       style={{ fontSize }}
