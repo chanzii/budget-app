@@ -99,7 +99,13 @@ function parseDate(s: string) {
   const [y, m, d] = s.split("-").map(Number);
   return new Date(y, m - 1, d);
 }
-
+// (추가) 캘린더 헬퍼
+function daysInMonth(y: number, m: number) {
+  return new Date(y, m, 0).getDate(); // m: 1~12
+}
+function firstDayOfWeek(y: number, m: number) {
+  return new Date(y, m - 1, 1).getDay(); // 0(일)~6(토)
+}
 function loadState(): AppState {
   try {
     const raw = localStorage.getItem(LS_KEY);
@@ -200,6 +206,7 @@ export default function BudgetApp() {
   // 🔧 (수정) 탭 상태 타입을 TabId로 통일
   const [tab, setTab] = useState<TabId>("home");
 const [filterItem, setFilterItem] = useState<string | null>(null);
+const [filterDate, setFilterDate] = useState<string | null>(null);
   const [month, setMonth] = useState<string>(() => ym(new Date()));
 
   useEffect(() => saveState(state), [state]);
@@ -460,66 +467,61 @@ function HomeView() {
   );
 }
 
- function ListView({
+function ListView({
   month,
   txs,
   filterItem,
   onChangeFilter,
-  // 아래 둘은 지금 코드에 이미 있으니 props로 안 받아도 됩니다.
-  // removeTx, setTab을 props로 넘기셨다면 여기에 추가하세요:
-  // removeTx,
-  // setTab,
+  filterDate,
+  onChangeDateFilter,
 }: {
   month: string;
   txs: Tx[];
   filterItem: string | null;
   onChangeFilter: (item: string | null) => void;
-  // 넘기셨다면 타입도 추가:
-  // removeTx: (id: string) => void;
-  // setTab: React.Dispatch<React.SetStateAction<TabId>>;
+  filterDate: string | null;
+  onChangeDateFilter: (date: string | null) => void;
 }) {
-  // ➜ 월 시작일 설정을 반영한 해당 월 범위 산출 (기존 유틸 그대로 사용)
   const range = useMemo(
     () => startEndOfMonth(month, state.settings.startDay),
     [month, state.settings.startDay]
   );
 
-  // ➜ 해당 월 + 상위카테고리=소비 인 거래만 추리기
-  const monthTxs = useMemo(
-    () =>
-      txs.filter((t) => {
-        const d = parseDate(t.date);
-        return t.top === "소비" && d >= range.start && d <= range.end;
-      }),
-    [txs, range]
-  );
+  // 이 달 + 소비만
+  const baseTxs = useMemo(() => {
+    return txs.filter((t) => {
+      const d = parseDate(t.date);
+      return t.top === "소비" && d >= range.start && d <= range.end;
+    });
+  }, [txs, range]);
 
-  // ➜ 드롭다운에 쓸 항목 목록
+  // 드롭다운 옵션(항목 목록)
   const itemOptions = useMemo(() => {
-    const set = new Set<string>();
-    monthTxs.forEach((t) => set.add(t.item));
-    return Array.from(set).sort((a, b) => a.localeCompare(b, "ko"));
-  }, [monthTxs]);
+    return Array.from(new Set(baseTxs.map((t) => t.item))).sort((a, b) =>
+      a.localeCompare(b, "ko")
+    );
+  }, [baseTxs]);
 
-  // ➜ 실제로 화면에 보여줄 목록(필터 적용)
+  // 최종 표시 목록: 날짜 → 항목 순으로 필터
   const viewTxs = useMemo(() => {
-    if (!filterItem) return monthTxs;
-    return monthTxs.filter((t) => t.item === filterItem);
-  }, [monthTxs, filterItem]);
+    let arr = baseTxs;
+    if (filterDate) arr = arr.filter((t) => t.date === filterDate);
+    if (filterItem) arr = arr.filter((t) => t.item === filterItem);
+    return arr;
+  }, [baseTxs, filterDate, filterItem]);
 
   return (
     <div>
       <div className="mb-3 flex items-center justify-between">
         <h2 className="text-lg font-semibold">소비내역</h2>
         <div className="flex items-center gap-2">
-          {/* 필터 드롭다운 */}
+          {/* 항목 필터 */}
           <select
             className="rounded-xl border px-3 py-2"
             value={filterItem ?? ""}
             onChange={(e) =>
               onChangeFilter(e.target.value === "" ? null : e.target.value)
             }
-            aria-label="항목 필터"
           >
             <option value="">전체 항목</option>
             {itemOptions.map((name) => (
@@ -529,21 +531,27 @@ function HomeView() {
             ))}
           </select>
 
-          {/* 월 선택 */}
-          <input
-            type="month"
-            value={month}
-            onChange={(e) => {
-              // 월 바꾸는 건 App.tsx에서 하고 계시니 그대로 두세요
-              // setMonth(e.target.value)
-              const ev = e; // 타입 경고 방지용 더미
-              void ev;
-              alert("상단 헤더의 월 선택을 사용해주세요."); // 필요 없으면 이 줄 삭제
-            }}
-            className="hidden" // 월 선택은 상단 공용에서 하시니 숨겨둡니다
-          />
+          {/* 활성화된 필터 표시/해제 */}
+          {(filterDate || filterItem) && (
+            <button
+              className="rounded-xl border px-2 py-1 text-sm"
+              onClick={() => {
+                onChangeFilter(null);
+                onChangeDateFilter(null);
+              }}
+            >
+              필터 해제
+            </button>
+          )}
         </div>
       </div>
+
+      {/* 날짜 필터 배지(있을 때만) */}
+      {filterDate && (
+        <div className="mb-2 text-sm text-slate-600">
+          날짜: <span className="font-medium">{filterDate}</span>
+        </div>
+      )}
 
       <div className="rounded-2xl border">
         <table className="min-w-full text-sm">
@@ -827,97 +835,156 @@ function HomeView() {
     );
   }
 
-  function MonthlyView() {
-    return (
-      <div>
-        <div className="mb-3 flex items-center justify-between">
-          <h2 className="text-lg font-semibold">월별 데이터</h2>
-          <input
-            type="month"
-            value={month}
-            onChange={(e) => setMonth(e.target.value)}
-            className="rounded-xl border px-3 py-2"
-          />
-        </div>
+ function MonthlyView() {
+  // 1) 캘린더 계산 (return 위, 함수 안)
+  const y = Number(month.slice(0, 4));
+  const m = Number(month.slice(5, 7));
+  const dcount = daysInMonth(y, m);
+  const first = firstDayOfWeek(y, m);
 
-        <Section title="항목별 지출(해당 월)">
-  <ul className="divide-y rounded-2xl border">
-    {chartData.map((d) => (
-     <li
-  key={d.name}
-  className="flex items-center justify-between px-4 py-3 cursor-pointer hover:bg-slate-50"
-  onClick={() => {
-    setFilterItem(d.name); // ← 자동 필터
-    setTab("list");        // ← 소비내역으로 이동
-  }}
->
-  <span className="truncate pr-3 text-sm">{d.name}</span>
-  <span className="whitespace-nowrap font-semibold">{KRW.format(d.actual)}</span>
-</li>
+  // 이 달 소비 tx
+  const monthConsumption = useMemo(() => {
+    return monthTxs.filter((t) => t.top === "소비");
+  }, [monthTxs]);
 
-    ))}
-  </ul>
+  // 날짜별 합계
+  const byDate = useMemo(() => {
+    const map = new Map<string, number>();
+    monthConsumption.forEach((t) => {
+      map.set(t.date, (map.get(t.date) || 0) + t.amount);
+    });
+    return map;
+  }, [monthConsumption]);
 
-  <div className="mt-3 flex items-center justify-between rounded-2xl bg-slate-50 px-4 py-3">
-    <span className="text-slate-600">합계</span>
-    <span className="text-lg font-bold">{KRW.format(spentSum)}</span>
-  </div>
-</Section>
-
-        <Section title="항목별 집행률(%)">
-          <div className="h-64 w-full">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart
-                data={chartData}
-                margin={{ top: 10, right: 10, bottom: 10, left: 0 }}
-              >
-                <CartesianGrid strokeDasharray="3 3" />
-                <XAxis
-  dataKey="name"
-  interval={0}
-  height={80}
-  tick={(props: any) => {
-    const { x, y, payload } = props;
-    return (
-      <g transform={`translate(${x},${y})`}>
-        <text dy={16} textAnchor="end" transform="rotate(-60)" style={{ fontSize: 12 }}>
-          {payload.value}
-        </text>
-      </g>
-    );
-  }}
-/>
-                <YAxis domain={[0, 100]} />
-                {/* 🔧 (수정) 미사용 파라미터 경고 제거 */}
-                <Tooltip
-                  formatter={(v: any, n: any, p: any) => {
-                    void n;
-                    return [v + "%", p.payload.name];
-                  }}
-                />
-                <ReferenceLine y={100} stroke="#ef4444" strokeDasharray="4 4" />
-                <Bar dataKey="rate">
-                  {chartData.map((e, idx) => (
-                    <Cell key={`c-${idx}`} fill={e.color} />
-                  ))}
-                </Bar>
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
-        </Section>
-
-        <div className="mt-4">
-          <button
-            onClick={() => setTab("home")}
-            className="rounded-xl border px-4 py-3"
-          >
-            ⓧ 홈으로
-          </button>
-        </div>
-        <TabBar value="monthly" onChange={setTab} />
-      </div>
-    );
+  // 캘린더 셀
+  const cells: { label: string; date?: string; sum?: number }[] = [];
+  for (let i = 0; i < first; i++) cells.push({ label: "" });
+  for (let d = 1; d <= dcount; d++) {
+    const ds = `${y}-${String(m).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
+    cells.push({ label: String(d), date: ds, sum: byDate.get(ds) || 0 });
   }
+  while (cells.length % 7 !== 0) cells.push({ label: "" });
+
+  // 2) JSX 시작
+  return (
+    <div>
+      <div className="mb-3 flex items-center justify-between">
+        <h2 className="text-lg font-semibold">월별 데이터</h2>
+        <input
+          type="month"
+          value={month}
+          onChange={(e) => setMonth(e.target.value)}
+          className="rounded-xl border px-3 py-2"
+        />
+      </div>
+
+      {/* 캘린더 섹션 */}
+      <Section title="월 캘린더(일별 합계)">
+        <div className="grid grid-cols-7 gap-1 text-center text-sm">
+          {["일","월","화","수","목","금","토"].map((w) => (
+            <div key={w} className="py-1 text-slate-500">{w}</div>
+          ))}
+          {cells.map((c, idx) => {
+            const clickable = !!c.date;
+            return (
+              <button
+                key={idx}
+                disabled={!clickable}
+                onClick={() => {
+                  if (!c.date) return;
+                  setFilterDate(c.date);  // 날짜 필터 지정
+                  setFilterItem(null);    // 항목 필터 초기화(원하면 유지 가능)
+                  setTab("list");         // 소비내역으로 이동
+                }}
+                className={
+                  "h-16 rounded-lg border flex flex-col items-center justify-center " +
+                  (clickable ? "hover:bg-slate-50" : "bg-slate-50/40 text-slate-400")
+                }
+              >
+                <div className="text-xs">{c.label}</div>
+                <div className={"mt-1 text-[11px] font-semibold " + ((c.sum||0)>0 ? "text-rose-600" : "text-slate-400")}>
+                  {c.date ? (c.sum ? KRW.format(c.sum) : "0원") : ""}
+                </div>
+              </button>
+            );
+          })}
+        </div>
+      </Section>
+
+      {/* 기존 섹션 1: 항목별 지출(해당 월) */}
+      <Section title="항목별 지출(해당 월)">
+        <ul className="divide-y rounded-2xl border">
+          {chartData.map((d) => (
+            <li
+              key={d.name}
+              className="flex items-center justify-between px-4 py-3 cursor-pointer hover:bg-slate-50"
+              onClick={() => {
+                setFilterItem(d.name);
+                setTab("list");
+              }}
+            >
+              <span className="truncate pr-3 text-sm">{d.name}</span>
+              <span className="whitespace-nowrap font-semibold">
+                {KRW.format(d.actual)}
+              </span>
+            </li>
+          ))}
+        </ul>
+        <div className="mt-3 flex items-center justify-between rounded-2xl bg-slate-50 px-4 py-3">
+          <span className="text-slate-600">합계</span>
+          <span className="text-lg font-bold">{KRW.format(spentSum)}</span>
+        </div>
+      </Section>
+
+      {/* 기존 섹션 2: 항목별 집행률(%) */}
+      <Section title="항목별 집행률(%)">
+        <div className="h-64 w-full">
+          <ResponsiveContainer width="100%" height="100%">
+            <BarChart data={chartData} margin={{ top: 10, right: 10, bottom: 10, left: 0 }}>
+              <CartesianGrid strokeDasharray="3 3" />
+              <XAxis
+                dataKey="name"
+                interval={0}
+                height={80}
+                tick={(props: any) => {
+                  const { x, y, payload } = props;
+                  return (
+                    <g transform={`translate(${x},${y})`}>
+                      <text dy={16} textAnchor="end" transform="rotate(-60)" style={{ fontSize: 12 }}>
+                        {payload.value}
+                      </text>
+                    </g>
+                  );
+                }}
+              />
+              <YAxis domain={[0, 100]} />
+              <Tooltip
+                formatter={(v: any, n: any, p: any) => {
+                  void n;
+                  return [v + "%", p.payload.name];
+                }}
+              />
+              <ReferenceLine y={100} stroke="#ef4444" strokeDasharray="4 4" />
+              <Bar dataKey="rate">
+                {chartData.map((e, idx) => (
+                  <Cell key={`c-${idx}`} fill={e.color} />
+                ))}
+              </Bar>
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
+      </Section>
+
+      <div className="mt-4">
+        <button onClick={() => setTab("home")} className="rounded-xl border px-4 py-3">
+          ⓧ 홈으로
+        </button>
+      </div>
+      <TabBar value="monthly" onChange={setTab} />
+    </div>
+  );
+}
+
 
   function SettingsView() {
     const [startDay, setStartDay] = useState<number>(state.settings.startDay);
@@ -1035,12 +1102,14 @@ function HomeView() {
 
       {tab === "home" && <HomeView />}
       {tab === "list" && (
-  <ListView
-    filterItem={filterItem}
-    onChangeFilter={setFilterItem}
-    month={month}
-    txs={state.txs}
-      />
+<ListView
+  month={month}
+  txs={state.txs}
+  filterItem={filterItem}
+  onChangeFilter={setFilterItem}
+  filterDate={filterDate}
+  onChangeDateFilter={setFilterDate}
+/>
 )}
       {tab === "budget" && <BudgetView />}
       {tab === "monthly" && <MonthlyView />}
