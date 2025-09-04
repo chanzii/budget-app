@@ -210,7 +210,12 @@ export default function BudgetApp() {
 const [filterItem, setFilterItem] = useState<string | null>(null);
 const [filterDate, setFilterDate] = useState<string | null>(null);
   const [month, setMonth] = useState<string>(() => ym(new Date()));
-
+useEffect(() => {
+  if (tab !== "list") {
+    setFilterItem(null);
+    setFilterDate(null);
+  }
+}, [tab]);
   useEffect(() => saveState(state), [state]);
 
   // 새 달에 들어가면 직전 달의 예산 항목을 자동 복사 (이월 금액 아님, 항목/계획만)
