@@ -896,15 +896,20 @@ function ListView({
                   setFilterItem(null);    // 항목 필터 초기화(원하면 유지 가능)
                   setTab("list");         // 소비내역으로 이동
                 }}
-                className={
-                  "h-16 rounded-lg border flex flex-col items-center justify-center " +
-                  (clickable ? "hover:bg-slate-50" : "bg-slate-50/40 text-slate-400")
-                }
+               className={
+  "h-16 p-1 min-w-0 rounded-lg border flex flex-col items-center justify-center " +
+  (clickable ? "hover:bg-slate-50" : "bg-slate-50/40 text-slate-400")
+}
               >
-                <div className="text-xs">{c.label}</div>
-                <div className={"mt-1 text-[11px] font-semibold " + ((c.sum||0)>0 ? "text-rose-600" : "text-slate-400")}>
-                  {c.date ? (c.sum ? KRW.format(c.sum) : "0원") : ""}
-                </div>
+                <div className="text-[11px] leading-none text-slate-500">{c.label}</div>
+                <div
+  className={
+    "mt-1 w-full px-1 text-[10px] sm:text-[11px] leading-tight font-semibold truncate " +
+    ((c.sum||0)>0 ? "text-rose-600" : "text-slate-400")
+  }
+>
+  {c.date ? (c.sum ? KRW.format(c.sum) : "0원") : ""}
+</div>
               </button>
             );
           })}
