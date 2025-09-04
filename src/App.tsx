@@ -199,6 +199,7 @@ export default function BudgetApp() {
   const [state, setState] = useState<AppState>(loadState());
   // 🔧 (수정) 탭 상태 타입을 TabId로 통일
   const [tab, setTab] = useState<TabId>("home");
+const [filterItem, setFilterItem] = useState<string | null>(null);
   const [month, setMonth] = useState<string>(() => ym(new Date()));
 
   useEffect(() => saveState(state), [state]);
@@ -459,74 +460,145 @@ function HomeView() {
   );
 }
 
-  function ListView() {
-    const txs = monthTxs.filter((t) => t.top === "소비");
-    return (
-      <div>
-        <div className="mb-3 flex items-center justify-between">
-          <h2 className="text-lg font-semibold">소비내역</h2>
+ function ListView({
+  month,
+  txs,
+  filterItem,
+  onChangeFilter,
+  // 아래 둘은 지금 코드에 이미 있으니 props로 안 받아도 됩니다.
+  // removeTx, setTab을 props로 넘기셨다면 여기에 추가하세요:
+  // removeTx,
+  // setTab,
+}: {
+  month: string;
+  txs: Tx[];
+  filterItem: string | null;
+  onChangeFilter: (item: string | null) => void;
+  // 넘기셨다면 타입도 추가:
+  // removeTx: (id: string) => void;
+  // setTab: React.Dispatch<React.SetStateAction<TabId>>;
+}) {
+  // ➜ 월 시작일 설정을 반영한 해당 월 범위 산출 (기존 유틸 그대로 사용)
+  const range = useMemo(
+    () => startEndOfMonth(month, state.settings.startDay),
+    [month, state.settings.startDay]
+  );
+
+  // ➜ 해당 월 + 상위카테고리=소비 인 거래만 추리기
+  const monthTxs = useMemo(
+    () =>
+      txs.filter((t) => {
+        const d = parseDate(t.date);
+        return t.top === "소비" && d >= range.start && d <= range.end;
+      }),
+    [txs, range]
+  );
+
+  // ➜ 드롭다운에 쓸 항목 목록
+  const itemOptions = useMemo(() => {
+    const set = new Set<string>();
+    monthTxs.forEach((t) => set.add(t.item));
+    return Array.from(set).sort((a, b) => a.localeCompare(b, "ko"));
+  }, [monthTxs]);
+
+  // ➜ 실제로 화면에 보여줄 목록(필터 적용)
+  const viewTxs = useMemo(() => {
+    if (!filterItem) return monthTxs;
+    return monthTxs.filter((t) => t.item === filterItem);
+  }, [monthTxs, filterItem]);
+
+  return (
+    <div>
+      <div className="mb-3 flex items-center justify-between">
+        <h2 className="text-lg font-semibold">소비내역</h2>
+        <div className="flex items-center gap-2">
+          {/* 필터 드롭다운 */}
+          <select
+            className="rounded-xl border px-3 py-2"
+            value={filterItem ?? ""}
+            onChange={(e) =>
+              onChangeFilter(e.target.value === "" ? null : e.target.value)
+            }
+            aria-label="항목 필터"
+          >
+            <option value="">전체 항목</option>
+            {itemOptions.map((name) => (
+              <option key={name} value={name}>
+                {name}
+              </option>
+            ))}
+          </select>
+
+          {/* 월 선택 */}
           <input
             type="month"
             value={month}
-            onChange={(e) => setMonth(e.target.value)}
-            className="rounded-xl border px-3 py-2"
+            onChange={(e) => {
+              // 월 바꾸는 건 App.tsx에서 하고 계시니 그대로 두세요
+              // setMonth(e.target.value)
+              const ev = e; // 타입 경고 방지용 더미
+              void ev;
+              alert("상단 헤더의 월 선택을 사용해주세요."); // 필요 없으면 이 줄 삭제
+            }}
+            className="hidden" // 월 선택은 상단 공용에서 하시니 숨겨둡니다
           />
         </div>
-        <div className="rounded-2xl border">
-          <table className="min-w-full text-sm">
-            <thead className="bg-slate-50 text-left">
-              <tr>
-                <th className="px-3 py-2">날짜</th>
-                <th className="px-3 py-2">항목</th>
-                <th className="px-3 py-2 text-right">금액</th>
-                <th className="px-3 py-2">메모</th>
-                <th className="px-3 py-2">관리</th>
-              </tr>
-            </thead>
-            <tbody>
-              {txs.map((t) => (
-                <tr key={t.id} className="border-t">
-                  <td className="px-3 py-2 whitespace-nowrap">{t.date}</td>
-                  <td className="px-3 py-2 whitespace-nowrap">{t.item}</td>
-                  <td className="px-3 py-2 whitespace-nowrap text-right font-semibold">
-                    {KRW.format(t.amount)}
-                  </td>
-                  <td className="px-3 py-2">{t.memo}</td>
-                  <td className="px-3 py-2">
-                    <button
-                      onClick={() => removeTx(t.id)}
-                      className="rounded-lg border px-2 py-1 hover:bg-slate-50"
-                    >
-                      삭제
-                    </button>
-                  </td>
-                </tr>
-              ))}
-              {txs.length === 0 && (
-                <tr>
-                  <td
-                    colSpan={5}
-                    className="px-3 py-8 text-center text-slate-500"
-                  >
-                    내역이 없습니다.
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
-        <div className="mt-4">
-          <button
-            onClick={() => setTab("home")}
-            className="rounded-xl border px-4 py-3"
-          >
-            ⓧ 홈으로
-          </button>
-        </div>
-        <TabBar value="list" onChange={setTab} />
       </div>
-    );
-  }
+
+      <div className="rounded-2xl border">
+        <table className="min-w-full text-sm">
+          <thead className="bg-slate-50 text-left">
+            <tr>
+              <th className="px-3 py-2">날짜</th>
+              <th className="px-3 py-2">항목</th>
+              <th className="px-3 py-2 text-right">금액</th>
+              <th className="px-3 py-2">메모</th>
+              <th className="px-3 py-2">관리</th>
+            </tr>
+          </thead>
+          <tbody>
+            {viewTxs.map((t) => (
+              <tr key={t.id} className="border-t">
+                <td className="px-3 py-2 whitespace-nowrap">{t.date}</td>
+                <td className="px-3 py-2 whitespace-nowrap">{t.item}</td>
+                <td className="px-3 py-2 whitespace-nowrap text-right font-semibold">
+                  {KRW.format(t.amount)}
+                </td>
+                <td className="px-3 py-2">{t.memo}</td>
+                <td className="px-3 py-2">
+                  <button
+                    onClick={() => removeTx(t.id)}
+                    className="rounded-lg border px-2 py-1 hover:bg-slate-50"
+                  >
+                    삭제
+                  </button>
+                </td>
+              </tr>
+            ))}
+            {viewTxs.length === 0 && (
+              <tr>
+                <td colSpan={5} className="px-3 py-8 text-center text-slate-500">
+                  내역이 없습니다.
+                </td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+
+      <div className="mt-4">
+        <button
+          onClick={() => setTab("home")}
+          className="rounded-xl border px-4 py-3"
+        >
+          ⓧ 홈으로
+        </button>
+      </div>
+      <TabBar value="list" onChange={setTab} />
+    </div>
+  );
+}
+
 
   function BudgetView() {
     const list = monthBudgets;
@@ -771,10 +843,18 @@ function HomeView() {
         <Section title="항목별 지출(해당 월)">
   <ul className="divide-y rounded-2xl border">
     {chartData.map((d) => (
-      <li key={d.name} className="flex items-center justify-between px-4 py-3">
-        <span className="truncate pr-3 text-sm">{d.name}</span>
-        <span className="whitespace-nowrap font-semibold">{KRW.format(d.actual)}</span>
-      </li>
+     <li
+  key={d.name}
+  className="flex items-center justify-between px-4 py-3 cursor-pointer hover:bg-slate-50"
+  onClick={() => {
+    setFilterItem(d.name); // ← 자동 필터
+    setTab("list");        // ← 소비내역으로 이동
+  }}
+>
+  <span className="truncate pr-3 text-sm">{d.name}</span>
+  <span className="whitespace-nowrap font-semibold">{KRW.format(d.actual)}</span>
+</li>
+
     ))}
   </ul>
 
@@ -954,7 +1034,14 @@ function HomeView() {
       </header>
 
       {tab === "home" && <HomeView />}
-      {tab === "list" && <ListView />}
+      {tab === "list" && (
+  <ListView
+    filterItem={filterItem}
+    onChangeFilter={setFilterItem}
+    month={month}
+    txs={state.txs}
+      />
+)}
       {tab === "budget" && <BudgetView />}
       {tab === "monthly" && <MonthlyView />}
       {tab === "settings" && <SettingsView />}
