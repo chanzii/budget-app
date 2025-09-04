@@ -1114,6 +1114,83 @@ function ListView({
           </div>
         </Section>
 
+// SettingsView 컴포넌트 안, "데이터" 섹션 버튼들 옆에 추가
+
+{/* ↓↓↓ 내보내기 버튼 */}
+<button
+  onClick={async () => {
+    const json = localStorage.getItem(LS_KEY);
+    if (!json) return alert("저장된 데이터가 없습니다.");
+
+    const fileName = `budget_backup_${new Date().toISOString().slice(0,10)}.json`;
+    const blob = new Blob([json], { type: "application/json" });
+
+    // 1) 모바일 공유(가능하면) → 파일 앱/드라이브로 바로 저장
+    const file = new File([blob], fileName, { type: "application/json" });
+    if (navigator.share && (navigator as any).canShare?.({ files: [file] })) {
+      try {
+        await navigator.share({
+          title: "가계부 백업",
+          text: "budget backup",
+          files: [file],
+        });
+        return;
+      } catch (e) {
+        // 사용자가 취소 시 아래 다운로드로 폴백
+      }
+    }
+
+    // 2) 일반 다운로드(안드/데스크탑, iOS도 대부분 '파일에 저장' 가능)
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = fileName; // iOS Safari는 다운로드 대신 미리보기일 수 있음 → 공유 버튼으로 저장 가능
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  }}
+  className="rounded-xl border px-3 py-2"
+>
+  데이터 내보내기(.json)
+</button>
+
+{/* ↓↓↓ 숨은 파일 입력 + 가져오기 버튼 */}
+<input
+  id="import-json"
+  type="file"
+  accept="application/json"
+  className="hidden"
+  onChange={(e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      try {
+        const text = String(reader.result || "");
+        const parsed = JSON.parse(text);
+        // 간단 검증 (필요 시 더 강하게)
+        if (!parsed || typeof parsed !== "object") throw new Error();
+        localStorage.setItem(LS_KEY, JSON.stringify(parsed));
+        alert("가져오기 완료! 새로고침 후 확인해보세요.");
+        location.reload(); // 즉시 반영
+      } catch {
+        alert("올바른 백업 파일이 아닙니다.");
+      }
+    };
+    reader.readAsText(file);
+    // 같은 파일 다시 선택 가능하도록 리셋
+    (e.target as HTMLInputElement).value = "";
+  }}
+/>
+<button
+  onClick={() => document.getElementById("import-json")?.click()}
+  className="rounded-xl border px-3 py-2"
+>
+  데이터 가져오기(.json)
+</button>
+
+
         <div className="mt-4">
           <button
             onClick={() => setTab("home")}
