@@ -904,16 +904,16 @@ function ListView({
 }
               >
                 <div className="text-[11px] leading-none text-slate-500">{c.label}</div>
-          {(() => {
+        {(() => {
   const sum = c.sum || 0;
 
-  // 원 단위 전체 표시
-  const text = `${sum.toLocaleString("ko-KR")}원`;
+  // '원' 없이 숫자만 쉼표 포함해서 표시
+  const text = sum.toLocaleString("ko-KR");
 
-  // 금액 텍스트 길이에 따라 폰트 크기 자동 결정
-  const digitCount = text.replace(/[^0-9]/g, "").length;
+  // 숫자 자릿수 (쉼표 제외)
+  const digitCount = String(sum).length;
 
-  // 자릿수에 따른 폰트 사이즈
+  // 자릿수별 폰트 크기 조절
   const fontSize =
     digitCount <= 4 ? 11 :
     digitCount === 5 ? 10 :
@@ -928,7 +928,7 @@ function ListView({
       }
       style={{ fontSize }}
     >
-      {c.date ? (sum ? text : "0원") : ""}
+      {c.date ? (sum ? text : "0") : ""}
     </div>
   );
 })()}
