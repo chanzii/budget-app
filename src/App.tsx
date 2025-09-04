@@ -489,6 +489,13 @@ function ListView({
   filterDate: string | null;
   onChangeDateFilter: (date: string | null) => void;
 }) {
+  // ✅ ListView가 화면에서 사라질 때(탭 이동 등) 필터 자동 해제
+  useEffect(() => {
+    return () => {
+      onChangeFilter(null);
+      onChangeDateFilter(null);
+    };
+  }, []);
   const range = useMemo(
     () => startEndOfMonth(month, state.settings.startDay),
     [month, state.settings.startDay]
