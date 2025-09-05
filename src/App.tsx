@@ -642,6 +642,17 @@ function ListView({
       return map;
     }, [list, monthTxs]);
 
+// ▶ 예산 합계(계획/실제/잔액)
+const totals = useMemo(() => {
+  const plan = list.reduce((s, b) => s + (b.plan || 0), 0);
+  let actual = 0;
+  list.forEach((b) => {
+    actual += actualByBudgetId.get(b.id) || 0;
+  });
+  const remain = Math.max(plan - actual, 0);
+  return { plan, actual, remain };
+}, [list, actualByBudgetId]);
+
     // 입력 중엔 로컬 상태에만 반영 → onBlur 때 한 번 저장(커서 튐 방지)
     const [editingName, setEditingName] = useState<Record<string, string>>({});
     const [editingPlan, setEditingPlan] = useState<Record<string, string>>({});
@@ -783,6 +794,23 @@ function ListView({
         })}
       </tbody>
     </table>
+{/* 합계 요약 */}
+<div className="mt-3 rounded-2xl border bg-slate-50 px-4 py-3">
+  <div className="grid grid-cols-3 gap-3 text-sm">
+    <div className="flex items-center justify-between">
+      <span className="text-slate-600">계획 합계</span>
+      <strong>{KRW.format(totals.plan)}</strong>
+    </div>
+    <div className="flex items-center justify-between">
+      <span className="text-slate-600">실제 합계</span>
+      <strong>{KRW.format(totals.actual)}</strong>
+    </div>
+    <div className="flex items-center justify-between">
+      <span className="text-slate-600">잔액 합계</span>
+      <strong>{KRW.format(totals.remain)}</strong>
+    </div>
+  </div>
+</div>
   </div>
 </Section>
 
