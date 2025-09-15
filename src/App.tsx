@@ -100,7 +100,6 @@ function parseDate(s: string) {
   return new Date(y, m - 1, d);
 }
 
-
 // (추가) 캘린더 헬퍼
 function daysInMonth(y: number, m: number) {
   return new Date(y, m, 0).getDate(); // m: 1~12
@@ -108,6 +107,22 @@ function daysInMonth(y: number, m: number) {
 function firstDayOfWeek(y: number, m: number) {
   return new Date(y, m - 1, 1).getDay(); // 0(일)~6(토)
 }
+
+// (보조) startDay 적용 시점 유틸 — "다음 달부터 적용" 옵션 보정
+function effectiveStartDay(yearMonth: string, settings: Settings) {
+  const today = new Date();
+  const curYM = ym(today);
+  const [y, m] = curYM.split("-").map(Number);
+  const next = new Date(y, m); // 다음달 1일
+  const nextYM = ym(next);
+
+  if (settings.startDayTakesEffectNextMonth) {
+    if (yearMonth >= nextYM) return settings.startDay; // 다음 달부터 적용
+    return 1; // 이전 달들엔 기본 1일 기준으로 계산
+  }
+  return settings.startDay;
+}
+
 function loadState(): AppState {
   try {
     const raw = localStorage.getItem(LS_KEY);
@@ -207,15 +222,16 @@ export default function BudgetApp() {
   const [state, setState] = useState<AppState>(loadState());
   // 🔧 (수정) 탭 상태 타입을 TabId로 통일
   const [tab, setTab] = useState<TabId>("home");
-const [filterItem, setFilterItem] = useState<string | null>(null);
-const [filterDate, setFilterDate] = useState<string | null>(null);
+  const [filterItem, setFilterItem] = useState<string | null>(null);
+  const [filterDate, setFilterDate] = useState<string | null>(null);
   const [month, setMonth] = useState<string>(() => ym(new Date()));
-useEffect(() => {
-  if (tab !== "list") {
-    setFilterItem(null);
-    setFilterDate(null);
-  }
-}, [tab]);
+
+  useEffect(() => {
+    if (tab !== "list") {
+      setFilterItem(null);
+      setFilterDate(null);
+    }
+  }, [tab]);
   useEffect(() => saveState(state), [state]);
 
   // 새 달에 들어가면 직전 달의 예산 항목을 자동 복사 (이월 금액 아님, 항목/계획만)
@@ -247,10 +263,11 @@ useEffect(() => {
     () => monthBudgets.filter((b) => b.top === "소비"),
     [monthBudgets]
   );
-  const monthRange = useMemo(
-    () => startEndOfMonth(month, state.settings.startDay),
-    [month, state.settings.startDay]
-  );
+  const monthRange = useMemo(() => {
+    const sd = effectiveStartDay(month, state.settings);
+    return startEndOfMonth(month, sd);
+  }, [month, state.settings]);
+
   const monthTxs = useMemo(
     () =>
       state.txs.filter((tx) => {
@@ -296,9 +313,6 @@ useEffect(() => {
   const remainSum = Math.max(planSum - spentSum, 0);
 
   // ===== 홈: 지출 기입칸 =====
-  
-  
-
   function addTx(tx: Tx) {
     setState((prev) => ({ ...prev, txs: [{ ...tx, id: uid() }, ...prev.txs] }));
   }
@@ -306,7 +320,6 @@ useEffect(() => {
     setState((prev) => ({ ...prev, txs: prev.txs.filter((t) => t.id !== id) }));
   }
 
- 
   // ===== 예산계획 조작 =====
   function upsertBudgetItem(b: Partial<BudgetItem> & { id?: string }) {
     setState((prev) => {
@@ -335,292 +348,372 @@ useEffect(() => {
     }));
   }
 
+  // ===== 화면들 =====
+  function HomeView() {
+    const dateRef = useRef<HTMLInputElement>(null);
+    const itemRef = useRef<HTMLSelectElement>(null);
+    const amountRef = useRef<HTMLInputElement>(null);
+    const memoRef = useRef<HTMLInputElement>(null);
 
-// ===== 화면들 =====
-function HomeView() {
-  const dateRef = useRef<HTMLInputElement>(null);
-  const itemRef = useRef<HTMLSelectElement>(null);
-  const amountRef = useRef<HTMLInputElement>(null);
-  const memoRef = useRef<HTMLInputElement>(null);
+    function handleSubmit() {
+      const date = dateRef.current?.value || todayStr();
+      const item = itemRef.current?.value || "";
+      const memo = memoRef.current?.value || "";
+      const amt = Number(amountRef.current?.value.replace(/[^0-9]/g, ""));
+      if (!item) return alert("항목을 선택하세요");
+      if (!amt || amt <= 0) return alert("금액을 입력하세요");
+      addTx({ id: "", date, top: "소비", item, amount: amt, memo });
+      if (amountRef.current) amountRef.current.value = "";
+      if (memoRef.current) memoRef.current.value = "";
+    }
 
-  function handleSubmit() {
-    const date = dateRef.current?.value || todayStr();
-    const item = itemRef.current?.value || "";
-    const memo = memoRef.current?.value || "";
-    const amt = Number(amountRef.current?.value.replace(/[^0-9]/g, ""));
-    if (!item) return alert("항목을 선택하세요");
-    if (!amt || amt <= 0) return alert("금액을 입력하세요");
-    addTx({ id: "", date, top: "소비", item, amount: amt, memo });
-    if (amountRef.current) amountRef.current.value = "";
-    if (memoRef.current) memoRef.current.value = "";
+    return (
+      <div className="space-y-4">
+        <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-end">
+          <div className="flex items-center gap-2">
+            <input
+              type="month"
+              value={month}
+              onChange={(e) => setMonth(e.target.value)}
+              className="rounded-xl border px-3 py-2"
+            />
+          </div>
+        </div>
+
+        <Section
+          title="소비 레포트"
+          right={<span className="text-sm text-slate-500">항목별 집행률(%)</span>}
+        >
+          {chartData.length > 0 ? (
+            <div className="h-64 w-full">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={chartData} margin={{ top: 10, right: 10, bottom: 10, left: 0 }}>
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis
+                    dataKey="name"
+                    interval={0}
+                    height={100}
+                    angle={-60}
+                    textAnchor="end"
+                    tickMargin={10}
+                    tick={{ fontSize: 12 }}
+                  />
+                  <YAxis domain={[0, 100]} ticks={[0, 25, 50, 75, 100]} />
+                  <Tooltip
+                    formatter={(v: any, _n: any, p: any) => [v + "%", p.payload.name]}
+                  />
+                  <ReferenceLine y={100} stroke="#ef4444" strokeDasharray="4 4" />
+                  <Bar dataKey="rate">
+                    {chartData.map((d, idx) => (
+                      <Cell key={idx} fill={d.color} />
+                    ))}
+                  </Bar>
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          ) : (
+            <div className="py-8 text-center text-slate-500">
+              소비 항목이 없습니다. 예산계획에서 항목을 추가하세요.
+            </div>
+          )}
+          <div className="mt-3 text-sm leading-6">
+            <div>이달 소비 지출액: <strong>{KRW.format(spentSum)}</strong></div>
+            <div>이달 소비 잔액: <strong>{KRW.format(remainSum)}</strong></div>
+          </div>
+        </Section>
+
+        <Section title="지출 기입 칸">
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">
+            <Field label="날짜">
+              <input
+                type="date"
+                ref={dateRef}
+                defaultValue={todayStr()}
+                className="w-full rounded-xl border px-3 py-2"
+              />
+            </Field>
+
+            <Field label="항목(소비)">
+              <select
+                ref={itemRef}
+                defaultValue={consumptionItems[0]?.name || ""}
+                className="w-full rounded-xl border px-3 py-2"
+              >
+                <option value="">선택</option>
+                {consumptionItems.map((b) => (
+                  <option key={b.id} value={b.name}>
+                    {b.name}
+                  </option>
+                ))}
+              </select>
+            </Field>
+
+            <Field label="금액">
+              <input
+                ref={amountRef}
+                type="text"
+                inputMode="numeric"
+                autoComplete="off"
+                enterKeyHint="done"
+                className="w-full rounded-xl border px-3 py-2"
+                placeholder="예: 50000"
+              />
+            </Field>
+
+            <Field label="메모(선택)">
+              <input
+                ref={memoRef}
+                type="text"
+                autoComplete="off"
+                className="w-full rounded-xl border px-3 py-2"
+              />
+            </Field>
+
+            <div className="flex items-end">
+              <button
+                type="button"
+                onClick={handleSubmit}
+                className="w-full rounded-xl bg-black px-4 py-3 text-white hover:opacity-90"
+              >
+                + 기입하기
+              </button>
+            </div>
+          </div>
+        </Section>
+
+        <TabBar value={tab} onChange={setTab} />
+      </div>
+    );
   }
 
-  return (
-    <div className="space-y-4">
-      <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-end">
-        <div className="flex items-center gap-2">
-          <input
-            type="month"
-            value={month}
-            onChange={(e) => setMonth(e.target.value)}
-            className="rounded-xl border px-3 py-2"
-          />
-        </div>
-      </div>
+  function ListView({
+    month,
+    txs,
+    filterItem,
+    onChangeFilter,
+    filterDate,
+    onChangeDateFilter,
+  }: {
+    month: string;
+    txs: Tx[];
+    filterItem: string | null;
+    onChangeFilter: (item: string | null) => void;
+    filterDate: string | null;
+    onChangeDateFilter: (date: string | null) => void;
+  }) {
+    // ✅ ListView가 화면에서 사라질 때(탭 이동 등) 필터 자동 해제
+    useEffect(() => {
+      return () => {
+        onChangeFilter(null);
+        onChangeDateFilter(null);
+      };
+    }, []);
 
-      <Section
-        title="소비 레포트"
-        right={<span className="text-sm text-slate-500">항목별 집행률(%)</span>}
-      >
-        {chartData.length > 0 ? (
-          <div className="h-64 w-full">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={chartData} margin={{ top: 10, right: 10, bottom: 10, left: 0 }}>
-                <CartesianGrid strokeDasharray="3 3" />
-                <XAxis
-                  dataKey="name"
-                  interval={0}
-                  height={100}
-                  angle={-60}
-                  textAnchor="end"
-                  tickMargin={10}
-                  tick={{ fontSize: 12 }}
+    const range = useMemo(
+      () => startEndOfMonth(month, effectiveStartDay(month, state.settings)),
+      [month, state.settings]
+    );
+
+    // 이 달 + 소비만 (월 범위)
+    const baseTxs = useMemo(() => {
+      return txs.filter((t) => {
+        const d = parseDate(t.date);
+        return t.top === "소비" && d >= range.start && d <= range.end;
+      });
+    }, [txs, range]);
+
+    // ▶ 기간 필터 상태 (신규)
+    const [rangeStart, setRangeStart] = useState<string | null>(null);
+    const [rangeEnd, setRangeEnd] = useState<string | null>(null);
+
+    // 캘린더에서 단일 날짜로 진입했을 때, 기간 필터로 흡수
+    useEffect(() => {
+      if (filterDate) {
+        setRangeStart(filterDate);
+        setRangeEnd(filterDate);
+      }
+    }, [filterDate]);
+
+    // 드롭다운 옵션(항목 목록)
+    const itemOptions = useMemo(() => {
+      return Array.from(new Set(baseTxs.map((t) => t.item))).sort((a, b) =>
+        a.localeCompare(b, "ko")
+      );
+    }, [baseTxs]);
+
+    // 최종 표시 목록: 기간 → 항목 순으로 필터
+    const viewTxs = useMemo(() => {
+      let arr = baseTxs;
+      if (rangeStart) arr = arr.filter((t) => t.date >= rangeStart);
+      if (rangeEnd) arr = arr.filter((t) => t.date <= rangeEnd);
+      if (filterItem) arr = arr.filter((t) => t.item === filterItem);
+      return arr;
+    }, [baseTxs, rangeStart, rangeEnd, filterItem]);
+
+    const totalAmount = useMemo(() => viewTxs.reduce((s, t) => s + t.amount, 0), [viewTxs]);
+
+    const hasAnyFilter = !!(rangeStart || rangeEnd || filterItem);
+
+    // 월 전체로 빠르게 리셋
+    function resetToMonth() {
+      setRangeStart(range.start.toISOString().slice(0, 10));
+      setRangeEnd(range.end.toISOString().slice(0, 10));
+    }
+
+    function clearPeriod() {
+      setRangeStart(null);
+      setRangeEnd(null);
+      onChangeDateFilter(null);
+    }
+
+    return (
+      <div>
+        <div className="mb-3 flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+          <h2 className="text-lg font-semibold">소비내역</h2>
+
+          {/* 필터 컨트롤 */}
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-end">
+            {/* 기간 필터 */}
+            <div className="flex items-end gap-2">
+              <Field label="시작일">
+                <input
+                  type="date"
+                  value={rangeStart ?? ""}
+                  max={rangeEnd ?? undefined}
+                  onChange={(e) => setRangeStart(e.target.value || null)}
+                  className="rounded-xl border px-3 py-2"
                 />
-                <YAxis domain={[0, 100]} ticks={[0, 25, 50, 75, 100]} />
-                <Tooltip
-                  formatter={(v: any, _n: any, p: any) => [v + "%", p.payload.name]}
+              </Field>
+              <Field label="종료일">
+                <input
+                  type="date"
+                  value={rangeEnd ?? ""}
+                  min={rangeStart ?? undefined}
+                  onChange={(e) => setRangeEnd(e.target.value || null)}
+                  className="rounded-xl border px-3 py-2"
                 />
-                <ReferenceLine y={100} stroke="#ef4444" strokeDasharray="4 4" />
-                <Bar dataKey="rate">
-                  {chartData.map((d, idx) => (
-                    <Cell key={idx} fill={d.color} />
-                  ))}
-                </Bar>
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
-        ) : (
-          <div className="py-8 text-center text-slate-500">
-            소비 항목이 없습니다. 예산계획에서 항목을 추가하세요.
-          </div>
-        )}
-        <div className="mt-3 text-sm leading-6">
-          <div>이달 소비 지출액: <strong>{KRW.format(spentSum)}</strong></div>
-          <div>이달 소비 잔액: <strong>{KRW.format(remainSum)}</strong></div>
-        </div>
-      </Section>
+              </Field>
+              <button
+                className="rounded-xl border px-3 py-2 text-sm"
+                onClick={resetToMonth}
+                title="현재 설정된 월 주기 전체로 설정"
+              >
+                이번 달 전체
+              </button>
+              {(rangeStart || rangeEnd) && (
+                <button className="rounded-xl border px-3 py-2 text-sm" onClick={clearPeriod}>
+                  기간 해제
+                </button>
+              )}
+            </div>
 
-      <Section title="지출 기입 칸">
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">
-          <Field label="날짜">
-            <input
-              type="date"
-              ref={dateRef}
-              defaultValue={todayStr()}
-              className="w-full rounded-xl border px-3 py-2"
-            />
-          </Field>
-
-          <Field label="항목(소비)">
+            {/* 항목 필터 */}
             <select
-              ref={itemRef}
-              defaultValue={consumptionItems[0]?.name || ""}
-              className="w-full rounded-xl border px-3 py-2"
+              className="rounded-xl border px-3 py-2"
+              value={filterItem ?? ""}
+              onChange={(e) =>
+                onChangeFilter(e.target.value === "" ? null : e.target.value)
+              }
             >
-              <option value="">선택</option>
-              {consumptionItems.map((b) => (
-                <option key={b.id} value={b.name}>
-                  {b.name}
+              <option value="">전체 항목</option>
+              {itemOptions.map((name) => (
+                <option key={name} value={name}>
+                  {name}
                 </option>
               ))}
             </select>
-          </Field>
 
-          <Field label="금액">
-            <input
-              ref={amountRef}
-              type="text"
-              inputMode="numeric"
-              autoComplete="off"
-              enterKeyHint="done"
-              className="w-full rounded-xl border px-3 py-2"
-              placeholder="예: 50000"
-            />
-          </Field>
-
-          <Field label="메모(선택)">
-            <input
-              ref={memoRef}
-              type="text"
-              autoComplete="off"
-              className="w-full rounded-xl border px-3 py-2"
-            />
-          </Field>
-
-          <div className="flex items-end">
-            <button
-              type="button"
-              onClick={handleSubmit}
-              className="w-full rounded-xl bg-black px-4 py-3 text-white hover:opacity-90"
-            >
-              + 기입하기
-            </button>
+            {/* 활성화된 필터 표시/해제 */}
+            {hasAnyFilter && (
+              <button
+                className="rounded-xl border px-2 py-1 text-sm"
+                onClick={() => {
+                  onChangeFilter(null);
+                  clearPeriod();
+                }}
+              >
+                필터 해제
+              </button>
+            )}
           </div>
         </div>
-      </Section>
 
-      <TabBar value={tab} onChange={setTab} />
-    </div>
-  );
-}
-
-function ListView({
-  month,
-  txs,
-  filterItem,
-  onChangeFilter,
-  filterDate,
-  onChangeDateFilter,
-}: {
-  month: string;
-  txs: Tx[];
-  filterItem: string | null;
-  onChangeFilter: (item: string | null) => void;
-  filterDate: string | null;
-  onChangeDateFilter: (date: string | null) => void;
-}) {
-  // ✅ ListView가 화면에서 사라질 때(탭 이동 등) 필터 자동 해제
-  useEffect(() => {
-    return () => {
-      onChangeFilter(null);
-      onChangeDateFilter(null);
-    };
-  }, []);
-  const range = useMemo(
-    () => startEndOfMonth(month, state.settings.startDay),
-    [month, state.settings.startDay]
-  );
-
-  // 이 달 + 소비만
-  const baseTxs = useMemo(() => {
-    return txs.filter((t) => {
-      const d = parseDate(t.date);
-      return t.top === "소비" && d >= range.start && d <= range.end;
-    });
-  }, [txs, range]);
-
-  // 드롭다운 옵션(항목 목록)
-  const itemOptions = useMemo(() => {
-    return Array.from(new Set(baseTxs.map((t) => t.item))).sort((a, b) =>
-      a.localeCompare(b, "ko")
-    );
-  }, [baseTxs]);
-
-  // 최종 표시 목록: 날짜 → 항목 순으로 필터
-  const viewTxs = useMemo(() => {
-    let arr = baseTxs;
-    if (filterDate) arr = arr.filter((t) => t.date === filterDate);
-    if (filterItem) arr = arr.filter((t) => t.item === filterItem);
-    return arr;
-  }, [baseTxs, filterDate, filterItem]);
-
-  return (
-    <div>
-      <div className="mb-3 flex items-center justify-between">
-        <h2 className="text-lg font-semibold">소비내역</h2>
-        <div className="flex items-center gap-2">
-          {/* 항목 필터 */}
-          <select
-            className="rounded-xl border px-3 py-2"
-            value={filterItem ?? ""}
-            onChange={(e) =>
-              onChangeFilter(e.target.value === "" ? null : e.target.value)
-            }
-          >
-            <option value="">전체 항목</option>
-            {itemOptions.map((name) => (
-              <option key={name} value={name}>
-                {name}
-              </option>
-            ))}
-          </select>
-
-          {/* 활성화된 필터 표시/해제 */}
-          {(filterDate || filterItem) && (
-            <button
-              className="rounded-xl border px-2 py-1 text-sm"
-              onClick={() => {
-                onChangeFilter(null);
-                onChangeDateFilter(null);
-              }}
-            >
-              필터 해제
-            </button>
-          )}
-        </div>
-      </div>
-
-      {/* 날짜 필터 배지(있을 때만) */}
-      {filterDate && (
-        <div className="mb-2 text-sm text-slate-600">
-          날짜: <span className="font-medium">{filterDate}</span>
-        </div>
-      )}
-
-      <div className="rounded-2xl border">
-        <table className="min-w-full text-sm">
-          <thead className="bg-slate-50 text-left">
-            <tr>
-              <th className="px-3 py-2">날짜</th>
-              <th className="px-3 py-2">항목</th>
-              <th className="px-3 py-2 text-right">금액</th>
-              <th className="px-3 py-2">메모</th>
-              <th className="px-3 py-2">관리</th>
-            </tr>
-          </thead>
-          <tbody>
-            {viewTxs.map((t) => (
-              <tr key={t.id} className="border-t">
-                <td className="px-3 py-2 whitespace-nowrap">{t.date}</td>
-                <td className="px-3 py-2 whitespace-nowrap">{t.item}</td>
-                <td className="px-3 py-2 whitespace-nowrap text-right font-semibold">
-                  {KRW.format(t.amount)}
-                </td>
-                <td className="px-3 py-2">{t.memo}</td>
-                <td className="px-3 py-2">
-                  <button
-                    onClick={() => removeTx(t.id)}
-                    className="rounded-lg border px-2 py-1 hover:bg-slate-50"
-                  >
-                    삭제
-                  </button>
-                </td>
-              </tr>
-            ))}
-            {viewTxs.length === 0 && (
-              <tr>
-                <td colSpan={5} className="px-3 py-8 text-center text-slate-500">
-                  내역이 없습니다.
-                </td>
-              </tr>
+        {/* 필터 배지 */}
+        {(rangeStart || rangeEnd || filterItem) && (
+          <div className="mb-2 flex flex-wrap items-center gap-2 text-sm text-slate-600">
+            {rangeStart && (
+              <span className="rounded-full bg-slate-100 px-2 py-1">시작: {rangeStart}</span>
             )}
-          </tbody>
-        </table>
-      </div>
+            {rangeEnd && (
+              <span className="rounded-full bg-slate-100 px-2 py-1">종료: {rangeEnd}</span>
+            )}
+            {filterItem && (
+              <span className="rounded-full bg-slate-100 px-2 py-1">항목: {filterItem}</span>
+            )}
+          </div>
+        )}
 
-      <div className="mt-4">
-        <button
-          onClick={() => setTab("home")}
-          className="rounded-xl border px-4 py-3"
-        >
-          ⓧ 홈으로
-        </button>
-      </div>
-      <TabBar value="list" onChange={setTab} />
-    </div>
-  );
-}
+        {/* 합계 바 */}
+        <div className="mb-2 flex items-center justify-between rounded-2xl bg-slate-50 px-4 py-3 text-sm">
+          <span className="text-slate-600">
+            {hasAnyFilter ? "필터된 소비합계" : "이달 소비합계"}
+          </span>
+          <span className="text-lg font-bold">{KRW.format(totalAmount)}</span>
+        </div>
 
+        <div className="rounded-2xl border">
+          <table className="min-w-full text-sm">
+            <thead className="bg-slate-50 text-left">
+              <tr>
+                <th className="px-3 py-2">날짜</th>
+                <th className="px-3 py-2">항목</th>
+                <th className="px-3 py-2 text-right">금액</th>
+                <th className="px-3 py-2">메모</th>
+                <th className="px-3 py-2">관리</th>
+              </tr>
+            </thead>
+            <tbody>
+              {viewTxs.map((t) => (
+                <tr key={t.id} className="border-t">
+                  <td className="px-3 py-2 whitespace-nowrap">{t.date}</td>
+                  <td className="px-3 py-2 whitespace-nowrap">{t.item}</td>
+                  <td className="px-3 py-2 whitespace-nowrap text-right font-semibold">
+                    {KRW.format(t.amount)}
+                  </td>
+                  <td className="px-3 py-2">{t.memo}</td>
+                  <td className="px-3 py-2">
+                    <button
+                      onClick={() => removeTx(t.id)}
+                      className="rounded-lg border px-2 py-1 hover:bg-slate-50"
+                    >
+                      삭제
+                    </button>
+                  </td>
+                </tr>
+              ))}
+              {viewTxs.length === 0 && (
+                <tr>
+                  <td colSpan={5} className="px-3 py-8 text-center text-slate-500">
+                    내역이 없습니다.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+
+        <div className="mt-4">
+          <button
+            onClick={() => setTab("home")}
+            className="rounded-xl border px-4 py-3"
+          >
+            ⓧ 홈으로
+          </button>
+        </div>
+        <TabBar value="list" onChange={setTab} />
+      </div>
+    );
+  }
 
   function BudgetView() {
     const list = monthBudgets;
@@ -642,10 +735,10 @@ function ListView({
       return map;
     }, [list, monthTxs]);
 
-// ▶ 계획 합계만 계산
-const planSum = useMemo(() => {
-  return list.reduce((sum, b) => sum + (b.plan || 0), 0);
-}, [list]);
+    // ▶ 계획 합계만 계산
+    const planSum = useMemo(() => {
+      return list.reduce((sum, b) => sum + (b.plan || 0), 0);
+    }, [list]);
     // 입력 중엔 로컬 상태에만 반영 → onBlur 때 한 번 저장(커서 튐 방지)
     const [editingName, setEditingName] = useState<Record<string, string>>({});
     const [editingPlan, setEditingPlan] = useState<Record<string, string>>({});
@@ -665,136 +758,135 @@ const planSum = useMemo(() => {
         </div>
 
         {/* === [모바일/데스크톱 반응형] 항목 목록 === */}
-<Section title="항목 목록">
-  {/* 휴대폰에선 컴팩트 폰트/패딩, 데스크톱은 기존 크기 유지 */}
-  <div className="-mx-2 overflow-x-auto sm:mx-0">
-   <table className="min-w-[640px] sm:min-w-full text-xs sm:text-sm table-fixed">
- <colgroup>
-  <col className="w-[56px] sm:w-[72px]" />      {/* 상위 */}
-  <col className="w-[160px] sm:w-auto" />       {/* 항목명: ↓ 줄였음 */}
-  <col className="w-[120px]" />                 {/* 계획 */}
-  <col className="w-[140px]" />                 {/* 실제 */}
-  <col className="w-[140px]" />                 {/* 잔액 */}
-  <col className="w-[80px] sm:w-[100px]" />     {/* 관리 */}
-</colgroup>
+        <Section title="항목 목록">
+          {/* 휴대폰에선 컴팩트 폰트/패딩, 데스크톱은 기존 크기 유지 */}
+          <div className="-mx-2 overflow-x-auto sm:mx-0">
+           <table className="min-w-[640px] sm:min-w-full text-xs sm:text-sm table-fixed">
+         <colgroup>
+          <col className="w-[56px] sm:w-[72px]" />      {/* 상위 */}
+          <col className="w-[160px] sm:w-auto" />       {/* 항목명 */}
+          <col className="w-[120px]" />                 {/* 계획 */}
+          <col className="w-[140px]" />                 {/* 실제 */}
+          <col className="w-[140px]" />                 {/* 잔액 */}
+          <col className="w-[80px] sm:w-[100px]" />     {/* 관리 */}
+        </colgroup>
 
-      <thead className="bg-slate-50 text-left">
-        <tr>
-          <th className="px-2 py-2 sm:px-3 sm:py-2">상위</th>
-          <th className="px-2 py-2 sm:px-3 sm:py-2">항목명</th>
-          <th className="px-2 py-2 text-right sm:px-3 sm:py-2">계획</th>
-          <th className="px-2 py-2 text-right sm:px-3 sm:py-2">실제(해당 월)</th>
-          <th className="px-2 py-2 text-right sm:px-3 sm:py-2">잔액</th>
-          <th className="px-2 py-2 sm:px-3 sm:py-2">관리</th>
-        </tr>
-      </thead>
+              <thead className="bg-slate-50 text-left">
+                <tr>
+                  <th className="px-2 py-2 sm:px-3 sm:py-2">상위</th>
+                  <th className="px-2 py-2 sm:px-3 sm:py-2">항목명</th>
+                  <th className="px-2 py-2 text-right sm:px-3 sm:py-2">계획</th>
+                  <th className="px-2 py-2 text-right sm:px-3 sm:py-2">실제(해당 월)</th>
+                  <th className="px-2 py-2 text-right sm:px-3 sm:py-2">잔액</th>
+                  <th className="px-2 py-2 sm:px-3 sm:py-2">관리</th>
+                </tr>
+              </thead>
 
-      <tbody>
-        {list.map(b => {
-          const actual = actualByBudgetId.get(b.id) || 0;
-          const remain = Math.max(b.plan - actual, 0);
-          const over = actual > b.plan;
+              <tbody>
+                {list.map(b => {
+                  const actual = actualByBudgetId.get(b.id) || 0;
+                  const remain = Math.max(b.plan - actual, 0);
+                  const over = actual > b.plan;
 
-          return (
-            <tr key={b.id} className="border-t align-middle">
-              {/* 상위 */}
-              <td className="px-2 py-2 sm:px-3 sm:py-2 whitespace-nowrap">{b.top}</td>
+                  return (
+                    <tr key={b.id} className="border-t align-middle">
+                      {/* 상위 */}
+                      <td className="px-2 py-2 sm:px-3 sm:py-2 whitespace-nowrap">{b.top}</td>
 
-              {/* 항목명: 모바일에선 줄바꿈 허용해 전체 표시, 데스크톱은 한 줄 */}
-              <td className="px-2 py-2 sm:px-3 sm:py-2">
-                <input
-                  ref={el => { nameRefs.current[b.id] = el; }}
-                  value={editingName[b.id] ?? b.name}
-                  onFocus={() =>
-                    setEditingName(prev => (prev[b.id] === undefined ? { ...prev, [b.id]: b.name } : prev))
-                  }
-                  onChange={e => setEditingName(prev => ({ ...prev, [b.id]: e.target.value }))}
-                  onBlur={() => {
-                    const val = editingName[b.id];
-                    if (val !== undefined && val !== b.name) upsertBudgetItem({ id: b.id, name: val });
-                    setEditingName(prev => { const cp = { ...prev }; delete cp[b.id]; return cp; });
-                  }}
-                  onKeyDown={e => {
-                    if (e.key === "Enter") (e.currentTarget as HTMLInputElement).blur();
-                    if (e.key === "Escape") {
-                      setEditingName(prev => { const cp = { ...prev }; delete cp[b.id]; return cp; });
-                      nameRefs.current[b.id]?.blur?.();
-                    }
-                  }}
-                  className="w-full rounded-lg border px-1.5 py-1 text-[13px] sm:text-base leading-tight sm:whitespace-nowrap break-words"
-                />
-              </td>
+                      {/* 항목명 */}
+                      <td className="px-2 py-2 sm:px-3 sm:py-2">
+                        <input
+                          ref={el => { nameRefs.current[b.id] = el; }}
+                          value={editingName[b.id] ?? b.name}
+                          onFocus={() =>
+                            setEditingName(prev => (prev[b.id] === undefined ? { ...prev, [b.id]: b.name } : prev))
+                          }
+                          onChange={e => setEditingName(prev => ({ ...prev, [b.id]: e.target.value }))}
+                          onBlur={() => {
+                            const val = editingName[b.id];
+                            if (val !== undefined && val !== b.name) upsertBudgetItem({ id: b.id, name: val });
+                            setEditingName(prev => { const cp = { ...prev }; delete cp[b.id]; return cp; });
+                          }}
+                          onKeyDown={e => {
+                            if (e.key === "Enter") (e.currentTarget as HTMLInputElement).blur();
+                            if (e.key === "Escape") {
+                              setEditingName(prev => { const cp = { ...prev }; delete cp[b.id]; return cp; });
+                              nameRefs.current[b.id]?.blur?.();
+                            }
+                          }}
+                          className="w-full rounded-lg border px-1.5 py-1 text-[13px] sm:text-base leading-tight sm:whitespace-nowrap break-words"
+                        />
+                      </td>
 
-              {/* 계획 입력칸: 모바일 좁은 폭 */}
-              <td className="px-2 py-2 sm:px-3 sm:py-2 text-right">
-                <input
-                  ref={el => { planRefs.current[b.id] = el; }}
-                  type="text"
-                  inputMode="numeric"
-                  pattern="[0-9]*"
-                  value={editingPlan[b.id] ?? String(b.plan)}
-                  onFocus={() =>
-                    setEditingPlan(prev => (prev[b.id] === undefined ? { ...prev, [b.id]: String(b.plan) } : prev))
-                  }
-                  onChange={e => {
-                    const digits = e.target.value.replace(/[^0-9]/g, "");
-                    setEditingPlan(prev => ({ ...prev, [b.id]: digits }));
-                  }}
-                  onBlur={() => {
-                    const val = editingPlan[b.id];
-                    if (val !== undefined && String(b.plan) !== val) upsertBudgetItem({ id: b.id, plan: Number(val || 0) });
-                    setEditingPlan(prev => { const cp = { ...prev }; delete cp[b.id]; return cp; });
-                  }}
-                  onKeyDown={e => {
-                    if (e.key === "Enter") (e.currentTarget as HTMLInputElement).blur();
-                    if (e.key === "Escape") {
-                      setEditingPlan(prev => { const cp = { ...prev }; delete cp[b.id]; return cp; });
-                      planRefs.current[b.id]?.blur?.();
-                    }
-                  }}
-                  className="w-24 sm:w-28 rounded-lg border px-2 py-1 text-right text-sm sm:text-base"
-                />
-              </td>
+                      {/* 계획 입력칸 */}
+                      <td className="px-2 py-2 sm:px-3 sm:py-2 text-right">
+                        <input
+                          ref={el => { planRefs.current[b.id] = el; }}
+                          type="text"
+                          inputMode="numeric"
+                          pattern="[0-9]*"
+                          value={editingPlan[b.id] ?? String(b.plan)}
+                          onFocus={() =>
+                            setEditingPlan(prev => (prev[b.id] === undefined ? { ...prev, [b.id]: String(b.plan) } : prev))
+                          }
+                          onChange={e => {
+                            const digits = e.target.value.replace(/[^0-9]/g, "");
+                            setEditingPlan(prev => ({ ...prev, [b.id]: digits }));
+                          }}
+                          onBlur={() => {
+                            const val = editingPlan[b.id];
+                            if (val !== undefined && String(b.plan) !== val) upsertBudgetItem({ id: b.id, plan: Number(val || 0) });
+                            setEditingPlan(prev => { const cp = { ...prev }; delete cp[b.id]; return cp; });
+                          }}
+                          onKeyDown={e => {
+                            if (e.key === "Enter") (e.currentTarget as HTMLInputElement).blur();
+                            if (e.key === "Escape") {
+                              setEditingPlan(prev => { const cp = { ...prev }; delete cp[b.id]; return cp; });
+                              planRefs.current[b.id]?.blur?.();
+                            }
+                          }}
+                          className="w-24 sm:w-28 rounded-lg border px-2 py-1 text-right text-sm sm:text-base"
+                        />
+                      </td>
 
-              {/* 실제/잔액: 모바일에선 더 작게, 줄바꿈 없이 */}
-              <td className="px-2 py-2 sm:px-3 sm:py-2 text-right whitespace-nowrap">
-                <span className="font-medium tracking-tight text-[13px] sm:text-base">
-                  {KRW.format(actual)}
-                </span>
-              </td>
-              <td className="px-2 py-2 sm:px-3 sm:py-2 text-right whitespace-nowrap">
-                <span className="font-medium tracking-tight text-[13px] sm:text-base">
-                  {KRW.format(remain)}
-                </span>
-              </td>
+                      {/* 실제/잔액 */}
+                      <td className="px-2 py-2 sm:px-3 sm:py-2 text-right whitespace-nowrap">
+                        <span className="font-medium tracking-tight text-[13px] sm:text-base">
+                          {KRW.format(actual)}
+                        </span>
+                      </td>
+                      <td className="px-2 py-2 sm:px-3 sm:py-2 text-right whitespace-nowrap">
+                        <span className="font-medium tracking-tight text-[13px] sm:text-base">
+                          {KRW.format(remain)}
+                        </span>
+                      </td>
 
-              {/* 관리 */}
-              <td className="px-2 py-2 sm:px-3 sm:py-2">
-                <button
-                  onClick={() => deleteBudgetItem(b.id)}
-                  className="rounded-lg border px-2 py-1 hover:bg-slate-50 text-[12px] sm:text-sm"
-                >
-                  삭제
-                </button>
-                {over && (
-                  <span className="ml-1 sm:ml-2 rounded-full bg-rose-100 px-2 py-0.5 text-[10px] sm:text-xs text-rose-700">
-                    100% 초과
-                  </span>
-                )}
-              </td>
-            </tr>
-          );
-        })}
-      </tbody>
-    </table>
+                      {/* 관리 */}
+                      <td className="px-2 py-2 sm:px-3 sm:py-2">
+                        <button
+                          onClick={() => deleteBudgetItem(b.id)}
+                          className="rounded-lg border px-2 py-1 hover:bg-slate-50 text-[12px] sm:text-sm"
+                        >
+                          삭제
+                        </button>
+                        {over && (
+                          <span className="ml-1 sm:ml-2 rounded-full bg-rose-100 px-2 py-0.5 text-[10px] sm:text-xs text-rose-700">
+                            100% 초과
+                          </span>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
 {/* 계획 합계 표시 */}
 <div className="mt-3 flex items-center justify-end rounded-2xl bg-slate-50 px-4 py-3 text-sm">
   <span className="text-slate-600 mr-2">계획 합계</span>
   <span className="font-bold text-lg">{KRW.format(planSum)}</span>
 </div>
-  </div>
-</Section>
-
+          </div>
+        </Section>
 
         <Section title="항목 추가">
           <form
@@ -915,9 +1007,9 @@ const planSum = useMemo(() => {
                 disabled={!clickable}
                 onClick={() => {
                   if (!c.date) return;
-                  setFilterDate(c.date);  // 날짜 필터 지정
-                  setFilterItem(null);    // 항목 필터 초기화(원하면 유지 가능)
-                  setTab("list");         // 소비내역으로 이동
+                  setFilterDate(c.date);  // 날짜 필터 지정 → ListView에서 기간 필터로 흡수
+                  setFilterItem(null);
+                  setTab("list");
                 }}
              className={
   "h-16 p-1 min-w-0 rounded-lg border flex flex-col items-center justify-center overflow-hidden " +
@@ -956,7 +1048,7 @@ const planSum = useMemo(() => {
         </div>
       </Section>
 
-      {/* 기존 섹션 1: 항목별 지출(해당 월) */}
+      {/* 항목별 지출(해당 월) */}
       <Section title="항목별 지출(해당 월)">
         <ul className="divide-y rounded-2xl border">
           {chartData.map((d) => (
@@ -981,7 +1073,7 @@ const planSum = useMemo(() => {
         </div>
       </Section>
 
-      {/* 기존 섹션 2: 항목별 집행률(%) */}
+      {/* 항목별 집행률(%) */}
       <Section title="항목별 집행률(%)">
         <div className="h-64 w-full">
           <ResponsiveContainer width="100%" height="100%">
@@ -1123,8 +1215,6 @@ const planSum = useMemo(() => {
           </div>
         </Section>
 
-// SettingsView 컴포넌트 안, "데이터" 섹션 버튼들 옆에 추가
-
 {/* ↓↓↓ 내보내기 버튼 */}
 <button
   onClick={async () => {
@@ -1134,7 +1224,6 @@ const planSum = useMemo(() => {
     const fileName = `budget_backup_${new Date().toISOString().slice(0,10)}.json`;
     const blob = new Blob([json], { type: "application/json" });
 
-    // 1) 모바일 공유(가능하면) → 파일 앱/드라이브로 바로 저장
     const file = new File([blob], fileName, { type: "application/json" });
     if (navigator.share && (navigator as any).canShare?.({ files: [file] })) {
       try {
@@ -1149,11 +1238,10 @@ const planSum = useMemo(() => {
       }
     }
 
-    // 2) 일반 다운로드(안드/데스크탑, iOS도 대부분 '파일에 저장' 가능)
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = fileName; // iOS Safari는 다운로드 대신 미리보기일 수 있음 → 공유 버튼으로 저장 가능
+    a.download = fileName;
     document.body.appendChild(a);
     a.click();
     a.remove();
@@ -1178,7 +1266,6 @@ const planSum = useMemo(() => {
       try {
         const text = String(reader.result || "");
         const parsed = JSON.parse(text);
-        // 간단 검증 (필요 시 더 강하게)
         if (!parsed || typeof parsed !== "object") throw new Error();
         localStorage.setItem(LS_KEY, JSON.stringify(parsed));
         alert("가져오기 완료! 새로고침 후 확인해보세요.");
