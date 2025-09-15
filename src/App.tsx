@@ -225,13 +225,17 @@ export default function BudgetApp() {
   const [filterItem, setFilterItem] = useState<string | null>(null);
   const [filterDate, setFilterDate] = useState<string | null>(null);
   const [month, setMonth] = useState<string>(() => ym(new Date()));
+const [listRangeStart, setListRangeStart] = useState<string | null>(null);
+const [listRangeEnd, setListRangeEnd] = useState<string | null>(null);
 
-  useEffect(() => {
-    if (tab !== "list") {
-      setFilterItem(null);
-      setFilterDate(null);
-    }
-  }, [tab]);
+ useEffect(() => {
+  if (tab !== "list") {
+    setFilterItem(null);
+    setFilterDate(null);
+    setListRangeStart(null);
+    setListRangeEnd(null);
+  }
+}, [tab]);
   useEffect(() => saveState(state), [state]);
 
   // 새 달에 들어가면 직전 달의 예산 항목을 자동 복사 (이월 금액 아님, 항목/계획만)
@@ -486,21 +490,29 @@ export default function BudgetApp() {
     );
   }
 
-  function ListView({
-    month,
-    txs,
-    filterItem,
-    onChangeFilter,
-    filterDate,
-    onChangeDateFilter,
-  }: {
-    month: string;
-    txs: Tx[];
-    filterItem: string | null;
-    onChangeFilter: (item: string | null) => void;
-    filterDate: string | null;
-    onChangeDateFilter: (date: string | null) => void;
-  }) {
+ function ListView({
+  month,
+  txs,
+  filterItem,
+  onChangeFilter,
+  filterDate,
+  onChangeDateFilter,
+  rangeStart,
+  rangeEnd,
+  onChangeRangeStart,
+  onChangeRangeEnd,
+}: {
+  month: string;
+  txs: Tx[];
+  filterItem: string | null;
+  onChangeFilter: (item: string | null) => void;
+  filterDate: string | null;
+  onChangeDateFilter: (date: string | null) => void;
+  rangeStart: string | null;
+  rangeEnd: string | null;
+  onChangeRangeStart: (v: string | null) => void;
+  onChangeRangeEnd: (v: string | null) => void;
+}) {
     // ✅ ListView가 화면에서 사라질 때(탭 이동 등) 필터 자동 해제
     useEffect(() => {
       return () => {
@@ -523,16 +535,15 @@ export default function BudgetApp() {
     }, [txs, range]);
 
     // ▶ 기간 필터 상태 (신규)
-    const [rangeStart, setRangeStart] = useState<string | null>(null);
-    const [rangeEnd, setRangeEnd] = useState<string | null>(null);
+
 
     // 캘린더에서 단일 날짜로 진입했을 때, 기간 필터로 흡수
-    useEffect(() => {
-      if (filterDate) {
-        setRangeStart(filterDate);
-        setRangeEnd(filterDate);
-      }
-    }, [filterDate]);
+ useEffect(() => {
+  if (filterDate) {
+    onChangeRangeStart(filterDate);
+    onChangeRangeEnd(filterDate);
+  }
+}, [filterDate, onChangeRangeStart, onChangeRangeEnd]);
 
     // 드롭다운 옵션(항목 목록)
     const itemOptions = useMemo(() => {
@@ -555,16 +566,16 @@ export default function BudgetApp() {
     const hasAnyFilter = !!(rangeStart || rangeEnd || filterItem);
 
     // 월 전체로 빠르게 리셋
-    function resetToMonth() {
-      setRangeStart(range.start.toISOString().slice(0, 10));
-      setRangeEnd(range.end.toISOString().slice(0, 10));
-    }
+   function resetToMonth() {
+  onChangeRangeStart(range.start.toISOString().slice(0, 10));
+  onChangeRangeEnd(range.end.toISOString().slice(0, 10));
+}
 
     function clearPeriod() {
-      setRangeStart(null);
-      setRangeEnd(null);
-      onChangeDateFilter(null);
-    }
+  onChangeRangeStart(null);
+  onChangeRangeEnd(null);
+  onChangeDateFilter(null);
+}
 
     return (
       <div>
@@ -580,7 +591,7 @@ export default function BudgetApp() {
                   type="date"
                   value={rangeStart ?? ""}
                   max={rangeEnd ?? undefined}
-                  onChange={(e) => setRangeStart(e.target.value || null)}
+                    onChange={(e) => onChangeRangeStart(e.target.value || null)}
                   className="rounded-xl border px-3 py-2"
                 />
               </Field>
@@ -589,7 +600,7 @@ export default function BudgetApp() {
                   type="date"
                   value={rangeEnd ?? ""}
                   min={rangeStart ?? undefined}
-                  onChange={(e) => setRangeEnd(e.target.value || null)}
+                   onChange={(e) => onChangeRangeEnd(e.target.value || null)}
                   className="rounded-xl border px-3 py-2"
                 />
               </Field>
@@ -1310,15 +1321,19 @@ export default function BudgetApp() {
       </header>
 
       {tab === "home" && <HomeView />}
-      {tab === "list" && (
-<ListView
-  month={month}
-  txs={state.txs}
-  filterItem={filterItem}
-  onChangeFilter={setFilterItem}
-  filterDate={filterDate}
-  onChangeDateFilter={setFilterDate}
-/>
+    {tab === "list" && (
+  <ListView
+    month={month}
+    txs={state.txs}
+    filterItem={filterItem}
+    onChangeFilter={setFilterItem}
+    filterDate={filterDate}
+    onChangeDateFilter={setFilterDate}
+    rangeStart={listRangeStart}
+    rangeEnd={listRangeEnd}
+    onChangeRangeStart={setListRangeStart}
+    onChangeRangeEnd={setListRangeEnd}
+  />
 )}
       {tab === "budget" && <BudgetView />}
       {tab === "monthly" && <MonthlyView />}
