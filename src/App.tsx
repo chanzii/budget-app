@@ -126,9 +126,30 @@ function loadState(): AppState {
   try {
     const raw = localStorage.getItem(LS_KEY);
     if (!raw) throw new Error("empty");
-    return JSON.parse(raw) as AppState;
+
+    const parsed = JSON.parse(raw) as Partial<AppState>;
+
+    // ▼ plan 마이그레이션: 없으면 기본 3개 생성
+    const plan: PlanItem[] = Array.isArray((parsed as any).plan)
+      ? (parsed as any).plan
+      : [
+          { id: uid(), name: "소비", plan: 0, actual: 0, memo: "" },
+          { id: uid(), name: "저축", plan: 0, actual: 0, memo: "" },
+          { id: uid(), name: "주거", plan: 0, actual: 0, memo: "" },
+        ];
+
+    const fixed: AppState = {
+      budgets: parsed.budgets || {},
+      txs: parsed.txs || [],
+      settings: parsed.settings || { startDay: 1, startDayTakesEffectNextMonth: true },
+      plan,
+    };
+
+    // 한 번 저장해 두어 이후엔 항상 plan이 존재하도록
+    localStorage.setItem(LS_KEY, JSON.stringify(fixed));
+    return fixed;
   } catch {
-    // 초기값: 소비 항목 3개 샘플
+    // 초기값
     const initMonth = ym(new Date());
     return {
       budgets: {
@@ -140,15 +161,14 @@ function loadState(): AppState {
       },
       txs: [],
       settings: { startDay: 1, startDayTakesEffectNextMonth: true },
- plan: [
-    { id: uid(), name: "소비", plan: 0, actual: 0, memo: "" },
-    { id: uid(), name: "저축", plan: 0, actual: 0, memo: "" },
-    { id: uid(), name: "주거", plan: 0, actual: 0, memo: "" },
-  ],
+      plan: [
+        { id: uid(), name: "소비", plan: 0, actual: 0, memo: "" },
+        { id: uid(), name: "저축", plan: 0, actual: 0, memo: "" },
+        { id: uid(), name: "주거", plan: 0, actual: 0, memo: "" },
+      ],
     };
   }
-}
-function saveState(s: AppState) {
+}function saveState(s: AppState) {
   localStorage.setItem(LS_KEY, JSON.stringify(s));
 }
 
@@ -1129,7 +1149,7 @@ export default function BudgetApp() {
 
 function PlanView() {
   // 상태/유틸
-  const list = state.plan;
+  const list = state.plan ?? [];
   const [newName, setNewName] = useState("");
   const [newPlan, setNewPlan] = useState("");
   const [newActual, setNewActual] = useState("");
