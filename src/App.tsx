@@ -1222,19 +1222,31 @@ const actualPie = useMemo(() => {
   }
 
   // label 렌더러(퍼센트)
-  const renderLabel = (total: number) => (props: any) => {
-    const { name, value, cx, cy, midAngle, innerRadius, outerRadius } = props;
-    const RAD = Math.PI / 180;
-    const radius = innerRadius + (outerRadius - innerRadius) * 0.6;
-    const x = cx + radius * Math.cos(-midAngle * RAD);
-    const y = cy + radius * Math.sin(-midAngle * RAD);
-    const pct = total > 0 ? Math.round((value / total) * 100) : 0;
-    return (
-      <text x={x} y={y} textAnchor="middle" dominantBaseline="central" style={{ fontSize: 12 }}>
-        {name} {pct}%
-      </text>
-    );
-  };
+  // ⚙️ 스마트 라벨: 좁으면 바깥으로, 텍스트는 두 줄(이름 / (퍼센트))
+const renderPieLabel = (total: number) => (props: any) => {
+  const { cx, cy, midAngle, innerRadius, outerRadius, percent, name, value } = props;
+  const RAD = Math.PI / 180;
+  const cos = Math.cos(-midAngle * RAD);
+  const sin = Math.sin(-midAngle * RAD);
+  const pct = total > 0 ? Math.round(((value ?? 0) as number / total) * 100)
+                        : Math.round((percent ?? 0) * 100);
+
+  const isSmall = (percent ?? 0) < 0.08;          // 8% 미만이면 바깥 라벨
+  const rInside  = innerRadius + (outerRadius - innerRadius) * 0.62;
+  const rOutside = outerRadius + 16;
+  const r = isSmall ? rOutside : rInside;
+
+  const x = cx + r * cos;
+  const y = cy + r * sin;
+  const anchor = isSmall ? (cos >= 0 ? "start" : "end") : "middle";
+
+  return (
+    <text x={x} y={y} textAnchor={anchor} dominantBaseline="central" style={{ fontSize: 12, fontWeight: 600 }}>
+      <tspan x={x} dy="-0.2em">{name}</tspan>
+      <tspan x={x} dy="1.2em">{`(${pct}%)`}</tspan>
+    </text>
+  );
+};
 
   return (
     <div>
@@ -1243,69 +1255,69 @@ const actualPie = useMemo(() => {
       </div>
 
       {/* 그래프: 계획/실제 */}
-      <Section title="비율(원그래프)">
-        <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
-          {/* 계획 */}
-          <div className="rounded-2xl border p-3">
-            <h3 className="mb-2 text-center font-semibold">계획</h3>
-            <div className="h-64 w-full">
-              <ResponsiveContainer>
-                <PieChart>
-                  <Pie
-                    data={planPie}
-                    dataKey="value"
-                    nameKey="name"
-                    cx="50%"
-                    cy="50%"
-                    outerRadius={90}
-                    label={renderLabel(planTotal)}
-                    labelLine={false}
-                  >
-                    {planPie.map((d, i) => <Cell key={i} fill={d.color} />)}
-                  </Pie>
-                  <Tooltip formatter={(v: any, _n: any, p: any) => [KRW.format(Number(v)), p.payload.name]} />
-                </PieChart>
-              </ResponsiveContainer>
-            </div>
-          </div>
+     <Section title="비율(원그래프)">
+  <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
+    {/* 계획 */}
+    <div className="rounded-2xl border p-3">
+      <h3 className="mb-2 text-center font-semibold">계획</h3>
+      <div className="h-64 w-full">
+        <ResponsiveContainer>
+          <PieChart>
+            <Pie
+              data={planPie}
+              dataKey="value"
+              nameKey="name"
+              cx="50%"
+              cy="50%"
+              outerRadius={90}
+              label={renderPieLabel(planTotal)}
+              labelLine={true}
+            >
+              {planPie.map((d, i) => <Cell key={i} fill={d.color} />)}
+            </Pie>
+            <Tooltip formatter={(v: any, _n: any, p: any) => [KRW.format(Number(v)), p.payload.name]} />
+          </PieChart>
+        </ResponsiveContainer>
+      </div>
+    </div>
 
-          {/* 실제 */}
-          <div className="rounded-2xl border p-3">
-            <h3 className="mb-2 text-center font-semibold">실제</h3>
-            <div className="h-64 w-full">
-              <ResponsiveContainer>
-                <PieChart>
-                  <Pie
-                    data={actualPie}
-                    dataKey="value"
-                    nameKey="name"
-                    cx="50%"
-                    cy="50%"
-                    outerRadius={90}
-                    label={renderLabel(actualTotal)}
-                    labelLine={false}
-                  >
-                    {actualPie.map((d, i) => <Cell key={i} fill={d.color} />)}
-                  </Pie>
-                  <Tooltip formatter={(v: any, _n: any, p: any) => [KRW.format(Number(v)), p.payload.name]} />
-                </PieChart>
-              </ResponsiveContainer>
-            </div>
-          </div>
-        </div>
+    {/* 실제 */}
+    <div className="rounded-2xl border p-3">
+      <h3 className="mb-2 text-center font-semibold">실제</h3>
+      <div className="h-64 w-full">
+        <ResponsiveContainer>
+          <PieChart>
+            <Pie
+              data={actualPie}
+              dataKey="value"
+              nameKey="name"
+              cx="50%"
+              cy="50%"
+              outerRadius={90}
+              label={renderPieLabel(actualTotal)}
+              labelLine={true}
+            >
+              {actualPie.map((d, i) => <Cell key={i} fill={d.color} />)}
+            </Pie>
+            <Tooltip formatter={(v: any, _n: any, p: any) => [KRW.format(Number(v)), p.payload.name]} />
+          </PieChart>
+        </ResponsiveContainer>
+      </div>
+    </div>
+  </div>
 
-        {/* 합계 */}
-        <div className="mt-3 grid grid-cols-2 gap-2 sm:w-1/2">
-          <div className="rounded-2xl bg-slate-50 px-4 py-3 text-sm flex items-center justify-between">
-            <span className="text-slate-600">계획 합계</span>
-            <span className="font-bold">{KRW.format(planTotal)}</span>
-          </div>
-          <div className="rounded-2xl bg-slate-50 px-4 py-3 text-sm flex items-center justify-between">
-            <span className="text-slate-600">실제 합계</span>
-            <span className="font-bold">{KRW.format(actualTotal)}</span>
-          </div>
-        </div>
-      </Section>
+  {/* 합계 */}
+  <div className="mt-3 grid grid-cols-2 gap-2 sm:w-1/2">
+    <div className="rounded-2xl bg-slate-50 px-4 py-3 text-sm flex items-center justify-between">
+      <span className="text-slate-600">계획 합계</span>
+      <span className="font-bold">{KRW.format(planTotal)}</span>
+    </div>
+    <div className="rounded-2xl bg-slate-50 px-4 py-3 text-sm flex items-center justify-between">
+      <span className="text-slate-600">실제 합계</span>
+      <span className="font-bold">{KRW.format(actualTotal)}</span>
+    </div>
+  </div>
+</Section>
 
       {/* 표: 항목 CRUD */}
    <Section title="항목 목록(카테고리/항목 자유 추가)">
