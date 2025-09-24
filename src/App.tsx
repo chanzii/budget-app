@@ -29,14 +29,16 @@ type BudgetItem = {
 };
 
 // 예산계획(상위 카테고리 계획판) 항목 타입
+type PlanCategory = "저축" | "고정지출" | "변동지출";
+
 type PlanItem = {
   id: string;
-  name: string;     // 예: 소비, 저축, 주거
-  plan: number;     // 계획 금액
-  actual: number;   // 실제 금액(수동 입력)
-  memo?: string;    // 비고
+  cat: PlanCategory; // ★ 카테고리
+  name: string;      // 항목명 (예: 식비, 통신비, 비상금 저축 등)
+  plan: number;      // 계획 금액
+  actual: number;    // 실제 금액(수동 입력)
+  memo?: string;     // 비고
 };
-
 type Settings = {
   startDay: number; // 1~31 (기본 1)
   startDayTakesEffectNextMonth: boolean; // true: 다음 달부터 적용
@@ -106,7 +108,15 @@ function daysInMonth(y: number, m: number) {
 function firstDayOfWeek(y: number, m: number) {
   return new Date(y, m - 1, 1).getDay(); // 0(일)~6(토)
 }
-
+function inferCat(name: string): PlanCategory {
+  if (name.includes("저축")) return "저축";
+  if (
+    ["월세", "전세", "관리비", "통신", "공과금", "보험", "주거", "고정"].some(k => name.includes(k))
+  ) {
+    return "고정지출";
+  }
+  return "변동지출";
+}
 // (보조) startDay 적용 시점 유틸 — "다음 달부터 적용" 옵션 보정
 function effectiveStartDay(yearMonth: string, settings: Settings) {
   const today = new Date();
@@ -130,13 +140,21 @@ function loadState(): AppState {
     const parsed = JSON.parse(raw) as Partial<AppState>;
 
     // ▼ plan 마이그레이션: 없으면 기본 3개 생성
-    const plan: PlanItem[] = Array.isArray((parsed as any).plan)
-      ? (parsed as any).plan
-      : [
-          { id: uid(), name: "소비", plan: 0, actual: 0, memo: "" },
-          { id: uid(), name: "저축", plan: 0, actual: 0, memo: "" },
-          { id: uid(), name: "주거", plan: 0, actual: 0, memo: "" },
-        ];
+    const rawPlan = (parsed as any).plan;
+const plan: PlanItem[] = Array.isArray(rawPlan)
+  ? rawPlan.map((p: any) => ({
+      id: p.id ?? uid(),
+      cat: (p.cat ?? inferCat(String(p.name ?? ""))) as PlanCategory,
+      name: String(p.name ?? "새 항목"),
+      plan: Number(p.plan ?? 0),
+      actual: Number(p.actual ?? 0),
+      memo: typeof p.memo === "string" ? p.memo : "",
+    }))
+  : [
+      { id: uid(), cat: "변동지출", name: "식비",   plan: 0, actual: 0, memo: "" },
+      { id: uid(), cat: "고정지출", name: "주거비", plan: 0, actual: 0, memo: "" },
+      { id: uid(), cat: "저축",     name: "저축",   plan: 0, actual: 0, memo: "" },
+    ];
 
     const fixed: AppState = {
       budgets: parsed.budgets || {},
@@ -161,11 +179,11 @@ function loadState(): AppState {
       },
       txs: [],
       settings: { startDay: 1, startDayTakesEffectNextMonth: true },
-      plan: [
-        { id: uid(), name: "소비", plan: 0, actual: 0, memo: "" },
-        { id: uid(), name: "저축", plan: 0, actual: 0, memo: "" },
-        { id: uid(), name: "주거", plan: 0, actual: 0, memo: "" },
-      ],
+    plan: [
+  { id: uid(), cat: "변동지출", name: "식비",   plan: 0, actual: 0, memo: "" },
+  { id: uid(), cat: "고정지출", name: "주거비", plan: 0, actual: 0, memo: "" },
+  { id: uid(), cat: "저축",     name: "저축",   plan: 0, actual: 0, memo: "" },
+],
     };
   }
 }function saveState(s: AppState) {
@@ -1151,6 +1169,7 @@ function PlanView() {
   // 상태/유틸
  const list = (state.plan ?? []) as PlanItem[];
   const [newName, setNewName] = useState("");
+const [newCat, setNewCat] = useState<PlanCategory>("변동지출");
 const [editingName, setEditingName] = useState<Record<string, string>>({});
 const [editingPlan, setEditingPlan] = useState<Record<string, string>>({});
 const [editingActual, setEditingActual] = useState<Record<string, string>>({});
@@ -1164,8 +1183,19 @@ const [editingMemo, setEditingMemo] = useState<Record<string, string>>({});
   const actualTotal = useMemo(() => list.reduce((s, v) => s + (v.actual || 0), 0), [list]);
 
   // 그래프 데이터
-  const planPie = useMemo(() => list.map((v, i) => ({ name: v.name, value: v.plan || 0, color: COLORS[i % COLORS.length] })), [list]);
-  const actualPie = useMemo(() => list.map((v, i) => ({ name: v.name, value: v.actual || 0, color: COLORS[i % COLORS.length] })), [list]);
+ // 그래프 데이터(카테고리별 합)
+const cats: PlanCategory[] = ["저축", "고정지출", "변동지출"];
+const planPie = useMemo(() => {
+  const sumBy: Record<PlanCategory, number> = { 저축: 0, 고정지출: 0, 변동지출: 0 };
+  list.forEach(v => { sumBy[v.cat] += v.plan || 0; });
+  return cats.map((c, i) => ({ name: c, value: sumBy[c], color: COLORS[i % COLORS.length] }));
+}, [list]);
+
+const actualPie = useMemo(() => {
+  const sumBy: Record<PlanCategory, number> = { 저축: 0, 고정지출: 0, 변동지출: 0 };
+  list.forEach(v => { sumBy[v.cat] += v.actual || 0; });
+  return cats.map((c, i) => ({ name: c, value: sumBy[c], color: COLORS[i % COLORS.length] }));
+}, [list]);
 
   // CRUD
   function upsertPlanItem(p: Partial<PlanItem> & { id?: string }) {
@@ -1175,7 +1205,14 @@ const [editingMemo, setEditingMemo] = useState<Record<string, string>>({});
         const i = arr.findIndex(x => x.id === p.id);
         if (i >= 0) arr[i] = { ...arr[i], ...p } as PlanItem;
       } else {
-        arr.push({ id: uid(), name: p.name || "새 항목", plan: p.plan || 0, actual: p.actual || 0, memo: p.memo || "" });
+        arr.push({
+  id: uid(),
+  cat: (p.cat ?? "변동지출") as PlanCategory,
+  name: p.name || "새 항목",
+  plan: p.plan || 0,
+  actual: p.actual || 0,
+  memo: p.memo || "",
+});
       }
       return { ...prev, plan: arr };
     });
@@ -1271,216 +1308,181 @@ const [editingMemo, setEditingMemo] = useState<Record<string, string>>({});
       </Section>
 
       {/* 표: 항목 CRUD */}
-      <Section title="항목 목록(소비/저축/주거 등 자유 추가)">
-        <div className="-mx-2 overflow-x-auto sm:mx-0">
-          <table className="min-w-[720px] sm:min-w-full text-xs sm:text-sm table-fixed">
-            <colgroup>
-              <col className="w-[160px]" /> {/* 항목 */}
-              <col className="w-[140px]" /> {/* 계획 */}
-              <col className="w-[140px]" /> {/* 실제 */}
-              <col />                       {/* 비고 */}
-              <col className="w-[90px]" />  {/* 관리 */}
-            </colgroup>
-            <thead className="bg-slate-50 text-left">
-              <tr>
-                <th className="px-2 py-2 sm:px-3">항목</th>
-                <th className="px-2 py-2 sm:px-3 text-right">계획금액</th>
-                <th className="px-2 py-2 sm:px-3 text-right">실제금액</th>
-                <th className="px-2 py-2 sm:px-3">비고</th>
-                <th className="px-2 py-2 sm:px-3">관리</th>
-              </tr>
-            </thead>
-            <tbody>
-              {list.map((r) => (
-                <tr key={r.id} className="border-t">
-                  <td className="px-2 py-2 sm:px-3">
-                   <input
-  value={editingName[r.id] ?? r.name}
-  onFocus={() =>
-    setEditingName(p => (p[r.id] === undefined ? { ...p, [r.id]: r.name } : p))
-  }
-  onChange={(e) =>
-    setEditingName(p => ({ ...p, [r.id]: e.target.value }))
-  }
-  onBlur={() => {
-    const val = editingName[r.id];
-    if (val !== undefined && val !== r.name) {
-      upsertPlanItem({ id: r.id, name: val });
-    }
-    setEditingName(p => {
-      const cp = { ...p };
-      delete cp[r.id];
-      return cp;
-    });
-  }}
-  onKeyDown={(e) => {
-    if (e.key === "Enter" || e.key === "Escape") {
-      (e.currentTarget as HTMLInputElement).blur();
-    }
-  }}
-  className="w-full rounded-lg border px-2 py-1"
-/>
-                  </td>
-                  <td className="px-2 py-2 sm:px-3 text-right">
-                    <input
-  type="text"
-  inputMode="numeric"
-  value={editingPlan[r.id] ?? String(r.plan)}
-  onFocus={() =>
-    setEditingPlan((prev) =>
-      prev[r.id] === undefined ? { ...prev, [r.id]: String(r.plan) } : prev
-    )
-  }
-  onChange={(e) => {
-    const digits = e.target.value.replace(/[^0-9]/g, "");
-    setEditingPlan((prev) => ({ ...prev, [r.id]: digits }));
-  }}
-  onBlur={() => {
-    const val = editingPlan[r.id];
-    if (val !== undefined && String(r.plan) !== val) {
-      upsertPlanItem({ id: r.id, plan: Number(val || 0) });
-    }
-    setEditingPlan((prev) => {
-      const cp = { ...prev };
-      delete cp[r.id];
-      return cp;
-    });
-  }}
-  onKeyDown={(e) => {
-    if (e.key === "Enter") (e.currentTarget as HTMLInputElement).blur();
-    if (e.key === "Escape") {
-      setEditingPlan((prev) => {
-        const cp = { ...prev };
-        delete cp[r.id];
-        return cp;
-      });
-      (e.currentTarget as HTMLInputElement).blur();
-    }
-  }}
-  className="w-28 rounded-lg border px-2 py-1 text-right"
-/>
-                  </td>
-                  <td className="px-2 py-2 sm:px-3 text-right">
-                   <input
-  type="text"
-  inputMode="numeric"
-  value={editingActual[r.id] ?? String(r.actual)}
-  onFocus={() =>
-    setEditingActual((prev) =>
-      prev[r.id] === undefined ? { ...prev, [r.id]: String(r.actual) } : prev
-    )
-  }
-  onChange={(e) => {
-    const digits = e.target.value.replace(/[^0-9]/g, "");
-    setEditingActual((prev) => ({ ...prev, [r.id]: digits }));
-  }}
-  onBlur={() => {
-    const val = editingActual[r.id];
-    if (val !== undefined && String(r.actual) !== val) {
-      upsertPlanItem({ id: r.id, actual: Number(val || 0) });
-    }
-    setEditingActual((prev) => {
-      const cp = { ...prev };
-      delete cp[r.id];
-      return cp;
-    });
-  }}
-  onKeyDown={(e) => {
-    if (e.key === "Enter") (e.currentTarget as HTMLInputElement).blur();
-    if (e.key === "Escape") {
-      setEditingActual((prev) => {
-        const cp = { ...prev };
-        delete cp[r.id];
-        return cp;
-      });
-      (e.currentTarget as HTMLInputElement).blur();
-    }
-  }}
-  className="w-28 rounded-lg border px-2 py-1 text-right"
-/>
-                  </td>
-                  <td className="px-2 py-2 sm:px-3">
-                  <input
-  value={editingMemo[r.id] ?? (r.memo || "")}
-  onFocus={() =>
-    setEditingMemo(p =>
-      p[r.id] === undefined ? { ...p, [r.id]: r.memo || "" } : p
-    )
-  }
-  onChange={(e) =>
-    setEditingMemo(p => ({ ...p, [r.id]: e.target.value }))
-  }
-  onBlur={() => {
-    const val = editingMemo[r.id] ?? "";
-    if (val !== (r.memo || "")) {
-      upsertPlanItem({ id: r.id, memo: val });
-    }
-    setEditingMemo(p => {
-      const cp = { ...p };
-      delete cp[r.id];
-      return cp;
-    });
-  }}
-  onKeyDown={(e) => {
-    if (e.key === "Enter" || e.key === "Escape") {
-      (e.currentTarget as HTMLInputElement).blur();
-    }
-  }}
-  className="w-full rounded-lg border px-2 py-1"
-/>
-                  </td>
-                  <td className="px-2 py-2 sm:px-3">
-                    <button
-                      onClick={() => deletePlanItem(r.id)}
-                      className="rounded-lg border px-2 py-1 hover:bg-slate-50"
-                    >
-                      삭제
-                    </button>
-                  </td>
-                </tr>
-              ))}
-              {list.length === 0 && (
-                <tr>
-                  <td colSpan={5} className="px-3 py-8 text-center text-slate-500">항목이 없습니다.</td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
-      </Section>
+   <Section title="항목 목록(카테고리/항목 자유 추가)">
+  <div className="-mx-2 overflow-x-auto sm:mx-0">
+    <table className="min-w-[820px] sm:min-w-full text-xs sm:text-sm table-fixed">
+      <colgroup>
+        <col className="w-[120px]" /> {/* 카테고리 */}
+        <col className="w-[160px]" /> {/* 항목 */}
+        <col className="w-[140px]" /> {/* 계획 */}
+        <col className="w-[140px]" /> {/* 실제 */}
+        <col />                       {/* 비고 */}
+        <col className="w-[90px]" />  {/* 관리 */}
+      </colgroup>
+      <thead className="bg-slate-50 text-left">
+        <tr>
+          <th className="px-2 py-2 sm:px-3">카테고리</th>
+          <th className="px-2 py-2 sm:px-3">항목</th>
+          <th className="px-2 py-2 sm:px-3 text-right">계획금액</th>
+          <th className="px-2 py-2 sm:px-3 text-right">실제금액</th>
+          <th className="px-2 py-2 sm:px-3">비고</th>
+          <th className="px-2 py-2 sm:px-3">관리</th>
+        </tr>
+      </thead>
+      <tbody>
+        {list.map((r) => (
+          <tr key={r.id} className="border-t">
+            {/* 카테고리 */}
+            <td className="px-2 py-2 sm:px-3">
+              <select
+                value={r.cat}
+                onChange={(e) =>
+                  upsertPlanItem({ id: r.id, cat: e.target.value as PlanCategory })
+                }
+                className="w-full rounded-lg border px-2 py-1"
+              >
+                <option value="저축">저축</option>
+                <option value="고정지출">고정지출</option>
+                <option value="변동지출">변동지출</option>
+              </select>
+            </td>
+
+            {/* 항목명(교체 입력칸 유지) */}
+            <td className="px-2 py-2 sm:px-3">
+              <input
+                value={editingName[r.id] ?? r.name}
+                onFocus={() =>
+                  setEditingName(p => (p[r.id] === undefined ? { ...p, [r.id]: r.name } : p))
+                }
+                onChange={(e) => setEditingName(p => ({ ...p, [r.id]: e.target.value }))}
+                onBlur={() => {
+                  const val = editingName[r.id];
+                  if (val !== undefined && val !== r.name) upsertPlanItem({ id: r.id, name: val });
+                  setEditingName(p => { const cp = { ...p }; delete cp[r.id]; return cp; });
+                }}
+                onKeyDown={(e) => { if (e.key === "Enter" || e.key === "Escape") (e.currentTarget as HTMLInputElement).blur(); }}
+                className="w-full rounded-lg border px-2 py-1"
+              />
+            </td>
+
+            {/* 계획/실제(교체 입력칸 유지) */}
+            <td className="px-2 py-2 sm:px-3 text-right">
+              <input
+                type="text" inputMode="numeric"
+                value={editingPlan[r.id] ?? String(r.plan)}
+                onFocus={() => setEditingPlan(prev => (prev[r.id] === undefined ? { ...prev, [r.id]: String(r.plan) } : prev))}
+                onChange={(e) => setEditingPlan(prev => ({ ...prev, [r.id]: e.target.value.replace(/[^0-9]/g, "") }))}
+                onBlur={() => {
+                  const val = editingPlan[r.id];
+                  if (val !== undefined && String(r.plan) !== val) upsertPlanItem({ id: r.id, plan: Number(val || 0) });
+                  setEditingPlan(prev => { const cp = { ...prev }; delete cp[r.id]; return cp; });
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") (e.currentTarget as HTMLInputElement).blur();
+                  if (e.key === "Escape") { setEditingPlan(prev => { const cp = { ...prev }; delete cp[r.id]; return cp; }); (e.currentTarget as HTMLInputElement).blur(); }
+                }}
+                className="w-28 rounded-lg border px-2 py-1 text-right"
+              />
+            </td>
+            <td className="px-2 py-2 sm:px-3 text-right">
+              <input
+                type="text" inputMode="numeric"
+                value={editingActual[r.id] ?? String(r.actual)}
+                onFocus={() => setEditingActual(prev => (prev[r.id] === undefined ? { ...prev, [r.id]: String(r.actual) } : prev))}
+                onChange={(e) => setEditingActual(prev => ({ ...prev, [r.id]: e.target.value.replace(/[^0-9]/g, "") }))}
+                onBlur={() => {
+                  const val = editingActual[r.id];
+                  if (val !== undefined && String(r.actual) !== val) upsertPlanItem({ id: r.id, actual: Number(val || 0) });
+                  setEditingActual(prev => { const cp = { ...prev }; delete cp[r.id]; return cp; });
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") (e.currentTarget as HTMLInputElement).blur();
+                  if (e.key === "Escape") { setEditingActual(prev => { const cp = { ...prev }; delete cp[r.id]; return cp; }); (e.currentTarget as HTMLInputElement).blur(); }
+                }}
+                className="w-28 rounded-lg border px-2 py-1 text-right"
+              />
+            </td>
+
+            {/* 비고(교체 입력칸 유지) */}
+            <td className="px-2 py-2 sm:px-3">
+              <input
+                value={editingMemo[r.id] ?? (r.memo || "")}
+                onFocus={() => setEditingMemo(p => (p[r.id] === undefined ? { ...p, [r.id]: r.memo || "" } : p))}
+                onChange={(e) => setEditingMemo(p => ({ ...p, [r.id]: e.target.value }))}
+                onBlur={() => {
+                  const val = editingMemo[r.id] ?? "";
+                  if (val !== (r.memo || "")) upsertPlanItem({ id: r.id, memo: val });
+                  setEditingMemo(p => { const cp = { ...p }; delete cp[r.id]; return cp; });
+                }}
+                onKeyDown={(e) => { if (e.key === "Enter" || e.key === "Escape") (e.currentTarget as HTMLInputElement).blur(); }}
+                className="w-full rounded-lg border px-2 py-1"
+              />
+            </td>
+
+            {/* 관리 */}
+            <td className="px-2 py-2 sm:px-3">
+              <button onClick={() => deletePlanItem(r.id)} className="rounded-lg border px-2 py-1 hover:bg-slate-50">
+                삭제
+              </button>
+            </td>
+          </tr>
+        ))}
+        {list.length === 0 && (
+          <tr>
+            <td colSpan={6} className="px-3 py-8 text-center text-slate-500">항목이 없습니다.</td>
+          </tr>
+        )}
+      </tbody>
+    </table>
+  </div>
+</Section>
 
       {/* 항목 추가 */}
-      <Section title="항목 추가">
-        <form
-          onSubmit={(e) => {
-            e.preventDefault();
-            upsertPlanItem({
-              name: newName || "새 항목",
-              plan: Number(newPlan || 0),
-              actual: Number(newActual || 0),
-              memo: newMemo || "",
-            });
-            setNewName(""); setNewPlan(""); setNewActual(""); setNewMemo("");
-          }}
-          className="grid grid-cols-2 gap-3 sm:grid-cols-5"
-        >
-          <Field label="항목명">
-            <input value={newName} onChange={(e) => setNewName(e.target.value)} className="w-full rounded-xl border px-3 py-2" />
-          </Field>
-          <Field label="계획금액">
-            <input type="number" min={0} value={newPlan} onChange={(e) => setNewPlan(e.target.value)} className="w-full rounded-xl border px-3 py-2" />
-          </Field>
-          <Field label="실제금액">
-            <input type="number" min={0} value={newActual} onChange={(e) => setNewActual(e.target.value)} className="w-full rounded-xl border px-3 py-2" />
-          </Field>
-          <Field label="비고">
-            <input value={newMemo} onChange={(e) => setNewMemo(e.target.value)} className="w-full rounded-xl border px-3 py-2" />
-          </Field>
-          <div className="col-span-2 sm:col-span-1 flex items-end">
-            <button className="w-full rounded-xl bg-black px-4 py-3 text-white hover:opacity-90">+ 추가</button>
-          </div>
-        </form>
-      </Section>
+     <Section title="항목 추가">
+  <form
+    onSubmit={(e) => {
+      e.preventDefault();
+      upsertPlanItem({
+        cat: newCat,
+        name: newName || "새 항목",
+        plan: Number(newPlan || 0),
+        actual: Number(newActual || 0),
+        memo: newMemo || "",
+      });
+      setNewCat("변동지출");
+      setNewName(""); setNewPlan(""); setNewActual(""); setNewMemo("");
+    }}
+    className="grid grid-cols-2 gap-3 sm:grid-cols-6"
+  >
+    <Field label="카테고리">
+      <select
+        value={newCat}
+        onChange={(e) => setNewCat(e.target.value as PlanCategory)}
+        className="w-full rounded-xl border px-3 py-2"
+      >
+        <option value="저축">저축</option>
+        <option value="고정지출">고정지출</option>
+        <option value="변동지출">변동지출</option>
+      </select>
+    </Field>
+    <Field label="항목명">
+      <input value={newName} onChange={(e) => setNewName(e.target.value)} className="w-full rounded-xl border px-3 py-2" />
+    </Field>
+    <Field label="계획금액">
+      <input type="number" min={0} value={newPlan} onChange={(e) => setNewPlan(e.target.value)} className="w-full rounded-xl border px-3 py-2" />
+    </Field>
+    <Field label="실제금액">
+      <input type="number" min={0} value={newActual} onChange={(e) => setNewActual(e.target.value)} className="w-full rounded-xl border px-3 py-2" />
+    </Field>
+    <Field label="비고">
+      <input value={newMemo} onChange={(e) => setNewMemo(e.target.value)} className="w-full rounded-xl border px-3 py-2" />
+    </Field>
+    <div className="col-span-2 sm:col-span-1 flex items-end">
+      <button className="w-full rounded-xl bg-black px-4 py-3 text-white hover:opacity-90">+ 추가</button>
+    </div>
+  </form>
+</Section>
+
 
       <div className="mt-4">
         <button onClick={() => setTab("home")} className="rounded-xl border px-4 py-3">ⓧ 홈으로</button>
