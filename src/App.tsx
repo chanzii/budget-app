@@ -233,33 +233,44 @@ function TabBar({
   value: TabId;
   onChange: React.Dispatch<React.SetStateAction<TabId>>;
 }) {
-  const items: { id: TabId; label: string }[] = [
-    { id: "home", label: "소비레포트" },
-    { id: "list", label: "소비내역" },
-    { id: "budget", label: "소비계획" },
-    { id: "monthly", label: "월별 데이터" },
- { id: "plan", label: "예산계획" },
-    { id: "settings", label: "설정" },
+  const items: { id: TabId; label: string; short: string }[] = [
+    // { id: "home", label: "소비레포트", short: "홈" }, // 하단 탭에서 홈은 숨김
+    { id: "list",    label: "소비내역",   short: "소비/내역" },
+    { id: "budget",  label: "소비계획",   short: "소비/계획" },
+    { id: "monthly", label: "월별 데이터", short: "월별" },
+    { id: "plan",    label: "예산계획",   short: "예산" },
+    { id: "settings",label: "설정",       short: "설정" },
   ];
+
   return (
-    <nav className="sticky bottom-0 z-10 mt-4 grid grid-cols-5 gap-2 border-t bg-white/95 px-2 py-2 sm:grid-cols-5">
+    <nav className="sticky bottom-0 z-10 mt-4 grid grid-cols-5 gap-2 border-t bg-white/95 px-2 py-2">
       {items
         .filter((i) => i.id !== "home")
         .map((i) => (
-          <button
-            key={i.id}
-            onClick={() => onChange(i.id)}
-            className={`rounded-xl px-3 py-2 text-sm ${
-              value === i.id ? "bg-black text-white" : "border"
-            }`}
-          >
-            {i.label}
-          </button>
+        <button
+  key={i.id}
+  onClick={() => onChange(i.id)}
+  className={`rounded-xl px-3 py-2 text-xs sm:text-sm leading-none min-w-[64px] ${
+    value === i.id ? "bg-black text-white" : "border"
+  }`}
+  title={i.label}
+>
+  {/* 모바일: '/'로 줄바꿈 */}
+  <span className="sm:hidden whitespace-normal leading-tight">
+    {i.short.includes("/")
+      ? i.short.split("/").map((s, idx) => (
+          <span key={idx} className="block">{s}</span>
+        ))
+      : i.short}
+  </span>
+
+  {/* 데스크톱 이상: 원래 긴 라벨 */}
+  <span className="hidden sm:inline">{i.label}</span>
+</button>
         ))}
     </nav>
   );
 }
-
 // ===== 메인 컴포넌트 =====
 export default function BudgetApp() {
   const [state, setState] = useState<AppState>(loadState());
