@@ -1124,181 +1124,227 @@ export default function BudgetApp() {
 
 
   function SettingsView() {
-    const [startDay, setStartDay] = useState<number>(state.settings.startDay);
-    return (
-      <div>
-        <h2 className="mb-4 text-lg font-semibold">설정</h2>
-        <Section title="월 시작 기준일">
-          <div className="flex flex-wrap items-center gap-3">
-            <select
-              value={startDay}
-              onChange={(e) => setStartDay(Number(e.target.value))}
-              className="rounded-xl border px-3 py-2"
-            >
-              {Array.from({ length: 31 }, (_, i) => i + 1).map((n) => (
-                <option key={n} value={n}>
-                  {n}일
-                </option>
-              ))}
-            </select>
-            <button
-              onClick={() => {
-                setState((prev) => ({
-                  ...prev,
-                  settings: {
-                    ...prev.settings,
-                    startDay,
-                    startDayTakesEffectNextMonth: true,
-                  },
-                }));
-                alert("월 시작일이 저장되었습니다. 다음 달부터 적용됩니다.");
-              }}
-              className="rounded-xl bg-black px-4 py-2 text-white"
-            >
-              저장
-            </button>
-          </div>
-          <p className="mt-2 text-sm text-slate-500">
-            변경 사항은 다음 달부터 적용됩니다. (이월 없음)
-          </p>
-        </Section>
+  const [startDay, setStartDay] = useState<number>(state.settings.startDay);
+  // ▼▼ 추가된 상태
+  const [showPaste, setShowPaste] = useState(false);
+  const [pasteText, setPasteText] = useState("");
 
-        <Section title="데이터">
-          <div className="flex flex-wrap gap-2">
-            <button
-              onClick={() => {
-                if (!confirm("예시 데이터를 추가할까요?")) return;
-                const baseMonth = month;
-                const sample: Tx[] = [
-                  {
-                    id: "",
-                    date: `${baseMonth}-01`,
-                    top: "소비",
-                    item: "식비",
-                    amount: 3300,
-                  },
-                  {
-                    id: "",
-                    date: `${baseMonth}-02`,
-                    top: "소비",
-                    item: "생활비",
-                    amount: 39000,
-                  },
-                  {
-                    id: "",
-                    date: `${baseMonth}-04`,
-                    top: "소비",
-                    item: "공과금",
-                    amount: 23100,
-                  },
-                ];
-                setState((prev) => ({
-                  ...prev,
-                  txs: [...sample.map((s) => ({ ...s, id: uid() })), ...prev.txs],
-                }));
-                alert("예시 데이터가 추가되었습니다.");
-              }}
-              className="rounded-xl border px-3 py-2"
-            >
-              예시 데이터 추가
-            </button>
-            <button
-              onClick={() => {
-                if (!confirm("모든 데이터를 초기화할까요?")) return;
-                localStorage.removeItem(LS_KEY);
-                location.reload();
-              }}
-              className="rounded-xl border px-3 py-2"
-            >
-              전체 초기화
-            </button>
-          </div>
-        </Section>
+  return (
+    <div>
+      <h2 className="mb-4 text-lg font-semibold">설정</h2>
 
-{/* ↓↓↓ 내보내기 버튼 */}
-<button
-  onClick={async () => {
-    const json = localStorage.getItem(LS_KEY);
-    if (!json) return alert("저장된 데이터가 없습니다.");
-
-    const fileName = `budget_backup_${new Date().toISOString().slice(0,10)}.json`;
-    const blob = new Blob([json], { type: "application/json" });
-
-    const file = new File([blob], fileName, { type: "application/json" });
-    if (navigator.share && (navigator as any).canShare?.({ files: [file] })) {
-      try {
-        await navigator.share({
-          title: "가계부 백업",
-          text: "budget backup",
-          files: [file],
-        });
-        return;
-      } catch (e) {
-        // 사용자가 취소 시 아래 다운로드로 폴백
-      }
-    }
-
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = fileName;
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-    URL.revokeObjectURL(url);
-  }}
-  className="rounded-xl border px-3 py-2"
->
-  데이터 내보내기(.json)
-</button>
-
-{/* ↓↓↓ 숨은 파일 입력 + 가져오기 버튼 */}
-<input
-  id="import-json"
-  type="file"
-  accept="application/json"
-  className="hidden"
-  onChange={(e) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = () => {
-      try {
-        const text = String(reader.result || "");
-        const parsed = JSON.parse(text);
-        if (!parsed || typeof parsed !== "object") throw new Error();
-        localStorage.setItem(LS_KEY, JSON.stringify(parsed));
-        alert("가져오기 완료! 새로고침 후 확인해보세요.");
-        location.reload(); // 즉시 반영
-      } catch {
-        alert("올바른 백업 파일이 아닙니다.");
-      }
-    };
-    reader.readAsText(file);
-    // 같은 파일 다시 선택 가능하도록 리셋
-    (e.target as HTMLInputElement).value = "";
-  }}
-/>
-<button
-  onClick={() => document.getElementById("import-json")?.click()}
-  className="rounded-xl border px-3 py-2"
->
-  데이터 가져오기(.json)
-</button>
-
-
-        <div className="mt-4">
-          <button
-            onClick={() => setTab("home")}
-            className="rounded-xl border px-4 py-3"
+      <Section title="월 시작 기준일">
+        <div className="flex flex-wrap items-center gap-3">
+          <select
+            value={startDay}
+            onChange={(e) => setStartDay(Number(e.target.value))}
+            className="rounded-xl border px-3 py-2"
           >
-            ⓧ 홈으로
+            {Array.from({ length: 31 }, (_, i) => i + 1).map((n) => (
+              <option key={n} value={n}>
+                {n}일
+              </option>
+            ))}
+          </select>
+          <button
+            onClick={() => {
+              setState((prev) => ({
+                ...prev,
+                settings: {
+                  ...prev.settings,
+                  startDay,
+                  startDayTakesEffectNextMonth: true,
+                },
+              }));
+              alert("월 시작일이 저장되었습니다. 다음 달부터 적용됩니다.");
+            }}
+            className="rounded-xl bg-black px-4 py-2 text-white"
+          >
+            저장
           </button>
         </div>
-        <TabBar value="settings" onChange={setTab} />
+        <p className="mt-2 text-sm text-slate-500">
+          변경 사항은 다음 달부터 적용됩니다. (이월 없음)
+        </p>
+      </Section>
+
+      <Section title="데이터">
+        <div className="flex flex-wrap gap-2">
+          <button
+            onClick={() => {
+              if (!confirm("예시 데이터를 추가할까요?")) return;
+              const baseMonth = month;
+              const sample: Tx[] = [
+                { id: "", date: `${baseMonth}-01`, top: "소비", item: "식비", amount: 3300 },
+                { id: "", date: `${baseMonth}-02`, top: "소비", item: "생활비", amount: 39000 },
+                { id: "", date: `${baseMonth}-04`, top: "소비", item: "공과금", amount: 23100 },
+              ];
+              setState((prev) => ({
+                ...prev,
+                txs: [...sample.map((s) => ({ ...s, id: uid() })), ...prev.txs],
+              }));
+              alert("예시 데이터가 추가되었습니다.");
+            }}
+            className="rounded-xl border px-3 py-2"
+          >
+            예시 데이터 추가
+          </button>
+
+          <button
+            onClick={() => {
+              if (!confirm("모든 데이터를 초기화할까요?")) return;
+              localStorage.removeItem(LS_KEY);
+              location.reload();
+            }}
+            className="rounded-xl border px-3 py-2"
+          >
+            전체 초기화
+          </button>
+
+          {/* ▼▼ 추가된 버튼 2개 */}
+          <button
+            onClick={async () => {
+              const json = localStorage.getItem(LS_KEY);
+              if (!json) return alert("저장된 데이터가 없습니다.");
+              try {
+                await navigator.clipboard.writeText(json);
+                alert("클립보드로 복사되었습니다. 다른 기기에서 '붙여넣기에서 가져오기'로 붙여넣으세요.");
+              } catch {
+                setPasteText(json);
+                setShowPaste(true);
+                alert("클립보드 권한이 없어 아래 텍스트를 직접 복사해 주세요.");
+              }
+            }}
+            className="rounded-xl border px-3 py-2"
+          >
+            클립보드로 내보내기
+          </button>
+
+          <button
+            onClick={() => {
+              setPasteText("");
+              setShowPaste((v) => !v);
+            }}
+            className="rounded-xl border px-3 py-2"
+          >
+            붙여넣기에서 가져오기
+          </button>
+        </div>
+
+        {/* ▼▼ 추가된 붙여넣기 영역 */}
+        {showPaste && (
+          <div className="mt-3 space-y-2">
+            <p className="text-sm text-slate-600">
+              다른 기기에서 복사한 JSON을 아래에 붙여넣고 “가져오기 실행”을 누르세요.
+            </p>
+            <textarea
+              value={pasteText}
+              onChange={(e) => setPasteText(e.target.value)}
+              className="w-full h-32 rounded-xl border p-2 font-mono text-xs"
+              placeholder='여기에 {"budgets":...} 형태의 JSON을 붙여넣기'
+            />
+            <div className="flex gap-2">
+              <button
+                onClick={() => {
+                  try {
+                    const parsed = JSON.parse(pasteText);
+                    if (!parsed || typeof parsed !== "object") throw new Error();
+                    localStorage.setItem(LS_KEY, JSON.stringify(parsed));
+                    alert("가져오기 완료! 새로고침합니다.");
+                    location.reload();
+                  } catch {
+                    alert("올바른 백업 JSON이 아닙니다.");
+                  }
+                }}
+                className="rounded-xl border px-3 py-2"
+              >
+                가져오기 실행
+              </button>
+              <button
+                onClick={() => setShowPaste(false)}
+                className="rounded-xl border px-3 py-2"
+              >
+                닫기
+              </button>
+            </div>
+          </div>
+        )}
+      </Section>
+
+      {/* 기존의 파일 내보내기/가져오기는 그대로 유지 */}
+      {/* ↓↓↓ 내보내기 버튼 */}
+      <button
+        onClick={async () => {
+          const json = localStorage.getItem(LS_KEY);
+          if (!json) return alert("저장된 데이터가 없습니다.");
+          const fileName = `budget_backup_${new Date().toISOString().slice(0, 10)}.json`;
+          const blob = new Blob([json], { type: "application/json" });
+
+          const file = new File([blob], fileName, { type: "application/json" });
+          if (navigator.share && (navigator as any).canShare?.({ files: [file] })) {
+            try {
+              await navigator.share({ title: "가계부 백업", text: "budget backup", files: [file] });
+              return;
+            } catch {}
+          }
+
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement("a");
+          a.href = url;
+          a.download = fileName;
+          document.body.appendChild(a);
+          a.click();
+          a.remove();
+          URL.revokeObjectURL(url);
+        }}
+        className="rounded-xl border px-3 py-2"
+      >
+        데이터 내보내기(.json)
+      </button>
+
+      {/* ↓↓↓ 숨은 파일 입력 + 가져오기 버튼 */}
+      <input
+        id="import-json"
+        type="file"
+        accept="application/json"
+        className="hidden"
+        onChange={(e) => {
+          const file = e.target.files?.[0];
+          if (!file) return;
+          const reader = new FileReader();
+          reader.onload = () => {
+            try {
+              const text = String(reader.result || "");
+              const parsed = JSON.parse(text);
+              if (!parsed || typeof parsed !== "object") throw new Error();
+              localStorage.setItem(LS_KEY, JSON.stringify(parsed));
+              alert("가져오기 완료! 새로고침 후 확인해보세요.");
+              location.reload(); // 즉시 반영
+            } catch {
+              alert("올바른 백업 파일이 아닙니다.");
+            }
+          };
+          reader.readAsText(file);
+          (e.target as HTMLInputElement).value = "";
+        }}
+      />
+      <button
+        onClick={() => document.getElementById("import-json")?.click()}
+        className="rounded-xl border px-3 py-2"
+      >
+        데이터 가져오기(.json)
+      </button>
+
+      <div className="mt-4">
+        <button onClick={() => setTab("home")} className="rounded-xl border px-4 py-3">
+          ⓧ 홈으로
+        </button>
       </div>
-    );
-  }
+      <TabBar value="settings" onChange={setTab} />
+    </div>
+  );
+}
+
 
   return (
     <div className="mx-auto max-w-4xl px-3 py-4 sm:px-6 sm:py-8">
