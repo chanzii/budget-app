@@ -1149,8 +1149,12 @@ export default function BudgetApp() {
 
 function PlanView() {
   // 상태/유틸
-  const list = state.plan ?? [];
+ const list = (state.plan ?? []) as PlanItem[];
   const [newName, setNewName] = useState("");
+const [editingName, setEditingName] = useState<Record<string, string>>({});
+const [editingPlan, setEditingPlan] = useState<Record<string, string>>({});
+const [editingActual, setEditingActual] = useState<Record<string, string>>({});
+const [editingMemo, setEditingMemo] = useState<Record<string, string>>({});
   const [newPlan, setNewPlan] = useState("");
   const [newActual, setNewActual] = useState("");
   const [newMemo, setNewMemo] = useState("");
@@ -1290,42 +1294,140 @@ function PlanView() {
               {list.map((r) => (
                 <tr key={r.id} className="border-t">
                   <td className="px-2 py-2 sm:px-3">
-                    <input
-                      value={r.name}
-                      onChange={(e) => upsertPlanItem({ id: r.id, name: e.target.value })}
-                      className="w-full rounded-lg border px-2 py-1"
-                    />
+                   <input
+  value={editingName[r.id] ?? r.name}
+  onFocus={() =>
+    setEditingName(p => (p[r.id] === undefined ? { ...p, [r.id]: r.name } : p))
+  }
+  onChange={(e) =>
+    setEditingName(p => ({ ...p, [r.id]: e.target.value }))
+  }
+  onBlur={() => {
+    const val = editingName[r.id];
+    if (val !== undefined && val !== r.name) {
+      upsertPlanItem({ id: r.id, name: val });
+    }
+    setEditingName(p => {
+      const cp = { ...p };
+      delete cp[r.id];
+      return cp;
+    });
+  }}
+  onKeyDown={(e) => {
+    if (e.key === "Enter" || e.key === "Escape") {
+      (e.currentTarget as HTMLInputElement).blur();
+    }
+  }}
+  className="w-full rounded-lg border px-2 py-1"
+/>
                   </td>
                   <td className="px-2 py-2 sm:px-3 text-right">
                     <input
-                      type="text"
-                      inputMode="numeric"
-                      value={String(r.plan)}
-                      onChange={(e) => {
-                        const digits = e.target.value.replace(/[^0-9]/g, "");
-                        upsertPlanItem({ id: r.id, plan: Number(digits || 0) });
-                      }}
-                      className="w-28 rounded-lg border px-2 py-1 text-right"
-                    />
+  type="text"
+  inputMode="numeric"
+  value={editingPlan[r.id] ?? String(r.plan)}
+  onFocus={() =>
+    setEditingPlan((prev) =>
+      prev[r.id] === undefined ? { ...prev, [r.id]: String(r.plan) } : prev
+    )
+  }
+  onChange={(e) => {
+    const digits = e.target.value.replace(/[^0-9]/g, "");
+    setEditingPlan((prev) => ({ ...prev, [r.id]: digits }));
+  }}
+  onBlur={() => {
+    const val = editingPlan[r.id];
+    if (val !== undefined && String(r.plan) !== val) {
+      upsertPlanItem({ id: r.id, plan: Number(val || 0) });
+    }
+    setEditingPlan((prev) => {
+      const cp = { ...prev };
+      delete cp[r.id];
+      return cp;
+    });
+  }}
+  onKeyDown={(e) => {
+    if (e.key === "Enter") (e.currentTarget as HTMLInputElement).blur();
+    if (e.key === "Escape") {
+      setEditingPlan((prev) => {
+        const cp = { ...prev };
+        delete cp[r.id];
+        return cp;
+      });
+      (e.currentTarget as HTMLInputElement).blur();
+    }
+  }}
+  className="w-28 rounded-lg border px-2 py-1 text-right"
+/>
                   </td>
                   <td className="px-2 py-2 sm:px-3 text-right">
-                    <input
-                      type="text"
-                      inputMode="numeric"
-                      value={String(r.actual)}
-                      onChange={(e) => {
-                        const digits = e.target.value.replace(/[^0-9]/g, "");
-                        upsertPlanItem({ id: r.id, actual: Number(digits || 0) });
-                      }}
-                      className="w-28 rounded-lg border px-2 py-1 text-right"
-                    />
+                   <input
+  type="text"
+  inputMode="numeric"
+  value={editingActual[r.id] ?? String(r.actual)}
+  onFocus={() =>
+    setEditingActual((prev) =>
+      prev[r.id] === undefined ? { ...prev, [r.id]: String(r.actual) } : prev
+    )
+  }
+  onChange={(e) => {
+    const digits = e.target.value.replace(/[^0-9]/g, "");
+    setEditingActual((prev) => ({ ...prev, [r.id]: digits }));
+  }}
+  onBlur={() => {
+    const val = editingActual[r.id];
+    if (val !== undefined && String(r.actual) !== val) {
+      upsertPlanItem({ id: r.id, actual: Number(val || 0) });
+    }
+    setEditingActual((prev) => {
+      const cp = { ...prev };
+      delete cp[r.id];
+      return cp;
+    });
+  }}
+  onKeyDown={(e) => {
+    if (e.key === "Enter") (e.currentTarget as HTMLInputElement).blur();
+    if (e.key === "Escape") {
+      setEditingActual((prev) => {
+        const cp = { ...prev };
+        delete cp[r.id];
+        return cp;
+      });
+      (e.currentTarget as HTMLInputElement).blur();
+    }
+  }}
+  className="w-28 rounded-lg border px-2 py-1 text-right"
+/>
                   </td>
                   <td className="px-2 py-2 sm:px-3">
-                    <input
-                      value={r.memo || ""}
-                      onChange={(e) => upsertPlanItem({ id: r.id, memo: e.target.value })}
-                      className="w-full rounded-lg border px-2 py-1"
-                    />
+                  <input
+  value={editingMemo[r.id] ?? (r.memo || "")}
+  onFocus={() =>
+    setEditingMemo(p =>
+      p[r.id] === undefined ? { ...p, [r.id]: r.memo || "" } : p
+    )
+  }
+  onChange={(e) =>
+    setEditingMemo(p => ({ ...p, [r.id]: e.target.value }))
+  }
+  onBlur={() => {
+    const val = editingMemo[r.id] ?? "";
+    if (val !== (r.memo || "")) {
+      upsertPlanItem({ id: r.id, memo: val });
+    }
+    setEditingMemo(p => {
+      const cp = { ...p };
+      delete cp[r.id];
+      return cp;
+    });
+  }}
+  onKeyDown={(e) => {
+    if (e.key === "Enter" || e.key === "Escape") {
+      (e.currentTarget as HTMLInputElement).blur();
+    }
+  }}
+  className="w-full rounded-lg border px-2 py-1"
+/>
                   </td>
                   <td className="px-2 py-2 sm:px-3">
                     <button
