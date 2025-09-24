@@ -1,16 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import {
-  BarChart,
-  Bar,
-  XAxis,
-  YAxis,
-  Tooltip,
-  ResponsiveContainer,
-  ReferenceLine,
-  CartesianGrid,
-  Cell,
-} from "recharts";
-
+import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, ReferenceLine, CartesianGrid, Cell, PieChart, Pie } from "recharts";
 // 가계부 웹앱 MVP (찬진님 사양)
 // - 월 단위 예산관리(이월 없음)
 // - 상위 카테고리: 소비/저축/기타 (그래프/요약은 "소비"만)
@@ -22,7 +11,7 @@ import {
 
 // ===== 공통 타입 =====
 type TopCategory = "소비" | "저축" | "기타";
-type TabId = "home" | "list" | "budget" | "monthly" | "settings";
+type TabId = "home" | "list" | "budget" | "monthly" | "plan" | "settings";
 type Tx = {
   id: string;
   date: string; // YYYY-MM-DD
@@ -39,6 +28,15 @@ type BudgetItem = {
   plan: number; // 계획 금액
 };
 
+// 예산계획(상위 카테고리 계획판) 항목 타입
+type PlanItem = {
+  id: string;
+  name: string;     // 예: 소비, 저축, 주거
+  plan: number;     // 계획 금액
+  actual: number;   // 실제 금액(수동 입력)
+  memo?: string;    // 비고
+};
+
 type Settings = {
   startDay: number; // 1~31 (기본 1)
   startDayTakesEffectNextMonth: boolean; // true: 다음 달부터 적용
@@ -48,6 +46,7 @@ type AppState = {
   budgets: Record<string, BudgetItem[]>; // key: YYYY-MM
   txs: Tx[]; // 모든 거래 (월 필터로 보기)
   settings: Settings;
+plan: PlanItem[]; // 새 예산계획(전역)
 };
 
 const LS_KEY = "budgetbook_spec_v2";
@@ -141,6 +140,11 @@ function loadState(): AppState {
       },
       txs: [],
       settings: { startDay: 1, startDayTakesEffectNextMonth: true },
+ plan: [
+    { id: uid(), name: "소비", plan: 0, actual: 0, memo: "" },
+    { id: uid(), name: "저축", plan: 0, actual: 0, memo: "" },
+    { id: uid(), name: "주거", plan: 0, actual: 0, memo: "" },
+  ],
     };
   }
 }
@@ -194,12 +198,13 @@ function TabBar({
   const items: { id: TabId; label: string }[] = [
     { id: "home", label: "소비레포트" },
     { id: "list", label: "소비내역" },
-    { id: "budget", label: "예산계획" },
+    { id: "budget", label: "소비계획" },
     { id: "monthly", label: "월별 데이터" },
+ { id: "plan", label: "예산계획" },
     { id: "settings", label: "설정" },
   ];
   return (
-    <nav className="sticky bottom-0 z-10 mt-4 grid grid-cols-4 gap-2 border-t bg-white/95 px-2 py-2 sm:grid-cols-4">
+    <nav className="sticky bottom-0 z-10 mt-4 grid grid-cols-5 gap-2 border-t bg-white/95 px-2 py-2 sm:grid-cols-5">
       {items
         .filter((i) => i.id !== "home")
         .map((i) => (
@@ -748,7 +753,7 @@ export default function BudgetApp() {
     return (
       <div>
         <div className="mb-3 flex items-center justify-between">
-          <h2 className="text-lg font-semibold">예산계획</h2>
+          <h2 className="text-lg font-semibold">소비계획</h2>
           <input
             type="month"
             value={month}
@@ -1122,6 +1127,247 @@ export default function BudgetApp() {
   );
 }
 
+function PlanView() {
+  // 상태/유틸
+  const list = state.plan;
+  const [newName, setNewName] = useState("");
+  const [newPlan, setNewPlan] = useState("");
+  const [newActual, setNewActual] = useState("");
+  const [newMemo, setNewMemo] = useState("");
+
+  // 합계
+  const planTotal = useMemo(() => list.reduce((s, v) => s + (v.plan || 0), 0), [list]);
+  const actualTotal = useMemo(() => list.reduce((s, v) => s + (v.actual || 0), 0), [list]);
+
+  // 그래프 데이터
+  const planPie = useMemo(() => list.map((v, i) => ({ name: v.name, value: v.plan || 0, color: COLORS[i % COLORS.length] })), [list]);
+  const actualPie = useMemo(() => list.map((v, i) => ({ name: v.name, value: v.actual || 0, color: COLORS[i % COLORS.length] })), [list]);
+
+  // CRUD
+  function upsertPlanItem(p: Partial<PlanItem> & { id?: string }) {
+    setState(prev => {
+      const arr = [...prev.plan];
+      if (p.id) {
+        const i = arr.findIndex(x => x.id === p.id);
+        if (i >= 0) arr[i] = { ...arr[i], ...p } as PlanItem;
+      } else {
+        arr.push({ id: uid(), name: p.name || "새 항목", plan: p.plan || 0, actual: p.actual || 0, memo: p.memo || "" });
+      }
+      return { ...prev, plan: arr };
+    });
+  }
+  function deletePlanItem(id: string) {
+    setState(prev => ({ ...prev, plan: prev.plan.filter(v => v.id !== id) }));
+  }
+
+  // label 렌더러(퍼센트)
+  const renderLabel = (total: number) => (props: any) => {
+    const { name, value, cx, cy, midAngle, innerRadius, outerRadius } = props;
+    const RAD = Math.PI / 180;
+    const radius = innerRadius + (outerRadius - innerRadius) * 0.6;
+    const x = cx + radius * Math.cos(-midAngle * RAD);
+    const y = cy + radius * Math.sin(-midAngle * RAD);
+    const pct = total > 0 ? Math.round((value / total) * 100) : 0;
+    return (
+      <text x={x} y={y} textAnchor="middle" dominantBaseline="central" style={{ fontSize: 12 }}>
+        {name} {pct}%
+      </text>
+    );
+  };
+
+  return (
+    <div>
+      <div className="mb-3 flex items-center justify-between">
+        <h2 className="text-lg font-semibold">예산계획</h2>
+      </div>
+
+      {/* 그래프: 계획/실제 */}
+      <Section title="비율(원그래프)">
+        <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
+          {/* 계획 */}
+          <div className="rounded-2xl border p-3">
+            <h3 className="mb-2 text-center font-semibold">계획</h3>
+            <div className="h-64 w-full">
+              <ResponsiveContainer>
+                <PieChart>
+                  <Pie
+                    data={planPie}
+                    dataKey="value"
+                    nameKey="name"
+                    cx="50%"
+                    cy="50%"
+                    outerRadius={90}
+                    label={renderLabel(planTotal)}
+                    labelLine={false}
+                  >
+                    {planPie.map((d, i) => <Cell key={i} fill={d.color} />)}
+                  </Pie>
+                  <Tooltip formatter={(v: any, _n: any, p: any) => [KRW.format(Number(v)), p.payload.name]} />
+                </PieChart>
+              </ResponsiveContainer>
+            </div>
+          </div>
+
+          {/* 실제 */}
+          <div className="rounded-2xl border p-3">
+            <h3 className="mb-2 text-center font-semibold">실제</h3>
+            <div className="h-64 w-full">
+              <ResponsiveContainer>
+                <PieChart>
+                  <Pie
+                    data={actualPie}
+                    dataKey="value"
+                    nameKey="name"
+                    cx="50%"
+                    cy="50%"
+                    outerRadius={90}
+                    label={renderLabel(actualTotal)}
+                    labelLine={false}
+                  >
+                    {actualPie.map((d, i) => <Cell key={i} fill={d.color} />)}
+                  </Pie>
+                  <Tooltip formatter={(v: any, _n: any, p: any) => [KRW.format(Number(v)), p.payload.name]} />
+                </PieChart>
+              </ResponsiveContainer>
+            </div>
+          </div>
+        </div>
+
+        {/* 합계 */}
+        <div className="mt-3 grid grid-cols-2 gap-2 sm:w-1/2">
+          <div className="rounded-2xl bg-slate-50 px-4 py-3 text-sm flex items-center justify-between">
+            <span className="text-slate-600">계획 합계</span>
+            <span className="font-bold">{KRW.format(planTotal)}</span>
+          </div>
+          <div className="rounded-2xl bg-slate-50 px-4 py-3 text-sm flex items-center justify-between">
+            <span className="text-slate-600">실제 합계</span>
+            <span className="font-bold">{KRW.format(actualTotal)}</span>
+          </div>
+        </div>
+      </Section>
+
+      {/* 표: 항목 CRUD */}
+      <Section title="항목 목록(소비/저축/주거 등 자유 추가)">
+        <div className="-mx-2 overflow-x-auto sm:mx-0">
+          <table className="min-w-[720px] sm:min-w-full text-xs sm:text-sm table-fixed">
+            <colgroup>
+              <col className="w-[160px]" /> {/* 항목 */}
+              <col className="w-[140px]" /> {/* 계획 */}
+              <col className="w-[140px]" /> {/* 실제 */}
+              <col />                       {/* 비고 */}
+              <col className="w-[90px]" />  {/* 관리 */}
+            </colgroup>
+            <thead className="bg-slate-50 text-left">
+              <tr>
+                <th className="px-2 py-2 sm:px-3">항목</th>
+                <th className="px-2 py-2 sm:px-3 text-right">계획금액</th>
+                <th className="px-2 py-2 sm:px-3 text-right">실제금액</th>
+                <th className="px-2 py-2 sm:px-3">비고</th>
+                <th className="px-2 py-2 sm:px-3">관리</th>
+              </tr>
+            </thead>
+            <tbody>
+              {list.map((r) => (
+                <tr key={r.id} className="border-t">
+                  <td className="px-2 py-2 sm:px-3">
+                    <input
+                      value={r.name}
+                      onChange={(e) => upsertPlanItem({ id: r.id, name: e.target.value })}
+                      className="w-full rounded-lg border px-2 py-1"
+                    />
+                  </td>
+                  <td className="px-2 py-2 sm:px-3 text-right">
+                    <input
+                      type="text"
+                      inputMode="numeric"
+                      value={String(r.plan)}
+                      onChange={(e) => {
+                        const digits = e.target.value.replace(/[^0-9]/g, "");
+                        upsertPlanItem({ id: r.id, plan: Number(digits || 0) });
+                      }}
+                      className="w-28 rounded-lg border px-2 py-1 text-right"
+                    />
+                  </td>
+                  <td className="px-2 py-2 sm:px-3 text-right">
+                    <input
+                      type="text"
+                      inputMode="numeric"
+                      value={String(r.actual)}
+                      onChange={(e) => {
+                        const digits = e.target.value.replace(/[^0-9]/g, "");
+                        upsertPlanItem({ id: r.id, actual: Number(digits || 0) });
+                      }}
+                      className="w-28 rounded-lg border px-2 py-1 text-right"
+                    />
+                  </td>
+                  <td className="px-2 py-2 sm:px-3">
+                    <input
+                      value={r.memo || ""}
+                      onChange={(e) => upsertPlanItem({ id: r.id, memo: e.target.value })}
+                      className="w-full rounded-lg border px-2 py-1"
+                    />
+                  </td>
+                  <td className="px-2 py-2 sm:px-3">
+                    <button
+                      onClick={() => deletePlanItem(r.id)}
+                      className="rounded-lg border px-2 py-1 hover:bg-slate-50"
+                    >
+                      삭제
+                    </button>
+                  </td>
+                </tr>
+              ))}
+              {list.length === 0 && (
+                <tr>
+                  <td colSpan={5} className="px-3 py-8 text-center text-slate-500">항목이 없습니다.</td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </Section>
+
+      {/* 항목 추가 */}
+      <Section title="항목 추가">
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            upsertPlanItem({
+              name: newName || "새 항목",
+              plan: Number(newPlan || 0),
+              actual: Number(newActual || 0),
+              memo: newMemo || "",
+            });
+            setNewName(""); setNewPlan(""); setNewActual(""); setNewMemo("");
+          }}
+          className="grid grid-cols-2 gap-3 sm:grid-cols-5"
+        >
+          <Field label="항목명">
+            <input value={newName} onChange={(e) => setNewName(e.target.value)} className="w-full rounded-xl border px-3 py-2" />
+          </Field>
+          <Field label="계획금액">
+            <input type="number" min={0} value={newPlan} onChange={(e) => setNewPlan(e.target.value)} className="w-full rounded-xl border px-3 py-2" />
+          </Field>
+          <Field label="실제금액">
+            <input type="number" min={0} value={newActual} onChange={(e) => setNewActual(e.target.value)} className="w-full rounded-xl border px-3 py-2" />
+          </Field>
+          <Field label="비고">
+            <input value={newMemo} onChange={(e) => setNewMemo(e.target.value)} className="w-full rounded-xl border px-3 py-2" />
+          </Field>
+          <div className="col-span-2 sm:col-span-1 flex items-end">
+            <button className="w-full rounded-xl bg-black px-4 py-3 text-white hover:opacity-90">+ 추가</button>
+          </div>
+        </form>
+      </Section>
+
+      <div className="mt-4">
+        <button onClick={() => setTab("home")} className="rounded-xl border px-4 py-3">ⓧ 홈으로</button>
+      </div>
+      <TabBar value="plan" onChange={setTab} />
+    </div>
+  );
+}
+
 
   function SettingsView() {
   const [startDay, setStartDay] = useState<number>(state.settings.startDay);
@@ -1368,6 +1614,7 @@ export default function BudgetApp() {
 )}
       {tab === "budget" && <BudgetView />}
       {tab === "monthly" && <MonthlyView />}
+{tab === "plan" && <PlanView />}         // 새 예산계획 탭
       {tab === "settings" && <SettingsView />}
     </div>
   );
