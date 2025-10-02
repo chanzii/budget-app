@@ -101,13 +101,7 @@ function parseDate(s: string) {
   return new Date(y, m - 1, d);
 }
 
-// (추가) 캘린더 헬퍼
-function daysInMonth(y: number, m: number) {
-  return new Date(y, m, 0).getDate(); // m: 1~12
-}
-function firstDayOfWeek(y: number, m: number) {
-  return new Date(y, m - 1, 1).getDay(); // 0(일)~6(토)
-}
+
 function inferCat(name: string): PlanCategory {
   if (name.includes("저축")) return "저축";
   if (
@@ -118,18 +112,10 @@ function inferCat(name: string): PlanCategory {
   return "변동지출";
 }
 // (보조) startDay 적용 시점 유틸 — "다음 달부터 적용" 옵션 보정
-function effectiveStartDay(yearMonth: string, settings: Settings) {
-  const today = new Date();
-  const curYM = ym(today);
-  const [y, m] = curYM.split("-").map(Number);
-  const next = new Date(y, m); // 다음달 1일
-  const nextYM = ym(next);
-
-  if (settings.startDayTakesEffectNextMonth) {
-    if (yearMonth >= nextYM) return settings.startDay; // 다음 달부터 적용
-    return 1; // 이전 달들엔 기본 1일 기준으로 계산
-  }
-  return settings.startDay;
+function effectiveStartDay(_yearMonth: string, settings: Settings) {
+  // 즉시 적용. 1~31 범위로 보정
+  const sd = Number(settings.startDay || 1);
+  return Math.max(1, Math.min(31, sd));
 }
 
 function loadState(): AppState {
@@ -1005,11 +991,12 @@ export default function BudgetApp() {
   }
 
  function MonthlyView() {
-  // 1) 캘린더 계산 (return 위, 함수 안)
-  const y = Number(month.slice(0, 4));
-  const m = Number(month.slice(5, 7));
-  const dcount = daysInMonth(y, m);
-  const first = firstDayOfWeek(y, m);
+// 1) 캘린더 계산 (커스텀 시작일 적용)
+const calRange = useMemo(
+  () => startEndOfMonth(month, effectiveStartDay(month, state.settings)),
+  [month, state.settings]
+);
+const first = calRange.start.getDay();
 
   // 이 달 소비 tx
   const monthConsumption = useMemo(() => {
@@ -1025,14 +1012,21 @@ export default function BudgetApp() {
     return map;
   }, [monthConsumption]);
 
-  // 캘린더 셀
-  const cells: { label: string; date?: string; sum?: number }[] = [];
-  for (let i = 0; i < first; i++) cells.push({ label: "" });
-  for (let d = 1; d <= dcount; d++) {
-    const ds = `${y}-${String(m).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
-    cells.push({ label: String(d), date: ds, sum: byDate.get(ds) || 0 });
-  }
-  while (cells.length % 7 !== 0) cells.push({ label: "" });
+ // 캘린더 셀 (기간: calRange.start ~ calRange.end)
+const cells: { label: string; date?: string; sum?: number }[] = [];
+for (let i = 0; i < first; i++) cells.push({ label: "" });
+
+const d = new Date(calRange.start);
+while (d <= calRange.end) {
+  const ds = d.toISOString().slice(0, 10);
+  cells.push({
+    label: String(d.getDate()),       // 날짜 숫자만 (월 넘어가면 1부터 다시)
+    date: ds,
+    sum: byDate.get(ds) || 0,
+  });
+  d.setDate(d.getDate() + 1);
+}
+while (cells.length % 7 !== 0) cells.push({ label: "" });
 
   // 2) JSX 시작
   return (
@@ -1541,24 +1535,24 @@ const renderPieLabel = (total: number) => (props: any) => {
           </select>
           <button
             onClick={() => {
-              setState((prev) => ({
-                ...prev,
-                settings: {
-                  ...prev.settings,
-                  startDay,
-                  startDayTakesEffectNextMonth: true,
-                },
-              }));
-              alert("월 시작일이 저장되었습니다. 다음 달부터 적용됩니다.");
-            }}
+  setState((prev) => ({
+    ...prev,
+    settings: {
+      ...prev.settings,
+      startDay,
+      startDayTakesEffectNextMonth: false, // 즉시 적용
+    },
+  }));
+  alert("월 시작일을 적용했어요. 모든 화면에 즉시 반영됩니다.");
+}}
             className="rounded-xl bg-black px-4 py-2 text-white"
           >
             저장
           </button>
         </div>
-        <p className="mt-2 text-sm text-slate-500">
-          변경 사항은 다음 달부터 적용됩니다. (이월 없음)
-        </p>
+      <p className="mt-2 text-sm text-slate-500">
+  선택한 시작일이 즉시 적용됩니다. (예: 9/6~10/5)
+</p>
       </Section>
 
       <Section title="데이터">
