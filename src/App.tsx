@@ -117,7 +117,17 @@ function effectiveStartDay(_yearMonth: string, settings: Settings) {
   const sd = Number(settings.startDay || 1);
   return Math.max(1, Math.min(31, sd));
 }
-
+// ▼▼ 여기 추가: 오늘 날짜가 속한 '회계월'의 YYYY-MM 키 계산
+function anchorMonthFor(date: Date, settings: Settings) {
+  const sd = effectiveStartDay(ym(date), settings); // 해당 달에 적용되는 시작일
+  const d = date.getDate();
+  if (d < sd) {
+    // 시작일 이전이면 '전 달'이 앵커
+    const prev = new Date(date.getFullYear(), date.getMonth() - 1, 1);
+    return ym(prev);
+  }
+  return ym(date);
+}
 function loadState(): AppState {
   try {
     const raw = localStorage.getItem(LS_KEY);
@@ -273,6 +283,10 @@ export default function BudgetApp() {
     }
   }, [tab]);
   useEffect(() => saveState(state), [state]);
+// ▼▼ 설정의 시작일/적용시점이 바뀌면, '오늘이 속한 회계월'로 기본 달을 보정
+useEffect(() => {
+  setMonth(anchorMonthFor(new Date(), state.settings));
+}, [state.settings.startDay, state.settings.startDayTakesEffectNextMonth]);
 
   // 새 달에 들어가면 직전 달의 예산 항목을 자동 복사 (이월 금액 아님, 항목/계획만)
   useEffect(() => {
@@ -1512,6 +1526,7 @@ const renderPieLabel = (total: number) => (props: any) => {
 
   function SettingsView() {
   const [startDay, setStartDay] = useState<number>(state.settings.startDay);
+const [applyNextMonth, setApplyNextMonth] = useState<boolean>(state.settings.startDayTakesEffectNextMonth);
   // ▼▼ 추가된 상태
   const [showPaste, setShowPaste] = useState(false);
   const [pasteText, setPasteText] = useState("");
@@ -1520,40 +1535,53 @@ const renderPieLabel = (total: number) => (props: any) => {
     <div>
       <h2 className="mb-4 text-lg font-semibold">설정</h2>
 
-      <Section title="월 시작 기준일">
-        <div className="flex flex-wrap items-center gap-3">
-          <select
-            value={startDay}
-            onChange={(e) => setStartDay(Number(e.target.value))}
-            className="rounded-xl border px-3 py-2"
-          >
-            {Array.from({ length: 31 }, (_, i) => i + 1).map((n) => (
-              <option key={n} value={n}>
-                {n}일
-              </option>
-            ))}
-          </select>
-          <button
-            onClick={() => {
-  setState((prev) => ({
-    ...prev,
-    settings: {
-      ...prev.settings,
-      startDay,
-      startDayTakesEffectNextMonth: false, // 즉시 적용
-    },
-  }));
-  alert("월 시작일을 적용했어요. 모든 화면에 즉시 반영됩니다.");
-}}
-            className="rounded-xl bg-black px-4 py-2 text-white"
-          >
-            저장
-          </button>
-        </div>
-      <p className="mt-2 text-sm text-slate-500">
-  선택한 시작일이 즉시 적용됩니다. (예: 9/6~10/5)
-</p>
-      </Section>
+     <Section title="월 시작 기준일">
+  <div className="flex flex-wrap items-center gap-3">
+    <select
+      value={startDay}
+      onChange={(e) => setStartDay(Number(e.target.value))}
+      className="rounded-xl border px-3 py-2"
+    >
+      {Array.from({ length: 31 }, (_, i) => i + 1).map((n) => (
+        <option key={n} value={n}>{n}일</option>
+      ))}
+    </select>
+
+    {/* 즉시 적용/다음 달부터 적용 토글 */}
+    <label className="flex items-center gap-2 text-sm text-slate-700">
+      <input
+        type="checkbox"
+        checked={applyNextMonth}
+        onChange={(e) => setApplyNextMonth(e.target.checked)}
+      />
+      <span>다음 달부터 적용</span>
+    </label>
+
+    <button
+      onClick={() => {
+        setState((prev) => ({
+          ...prev,
+          settings: {
+            ...prev.settings,
+            startDay,
+            startDayTakesEffectNextMonth: applyNextMonth,
+          },
+        }));
+        alert(
+          applyNextMonth
+            ? "월 시작일이 저장되었습니다. 다음 달부터 적용됩니다."
+            : "월 시작일이 저장되었습니다. 이번 달부터 즉시 적용됩니다."
+        );
+      }}
+      className="rounded-xl bg-black px-4 py-2 text-white"
+    >
+      저장
+    </button>
+  </div>
+  <p className="mt-2 text-sm text-slate-500">
+    체크 해제 시 “이번 달부터 즉시 적용”됩니다. 예: 시작일 6일이면 9/6~10/5가 ‘9월’로 보입니다.
+  </p>
+</Section>
 
       <Section title="데이터">
         <div className="flex flex-wrap gap-2">
